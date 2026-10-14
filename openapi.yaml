@@ -1,0 +1,99 @@
+openapi: 3.0.3
+info:
+  title: Toko Online API
+  description: API untuk toko online single-vendor dengan pembayaran transfer manual
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: support@toko-online.local
+
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Development server
+  - url: https://api.toko-online.local/api/v1
+    description: Production server
+
+tags:
+  - name: Health
+    description: Health check endpoints
+
+paths:
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health check endpoint
+      description: Mengembalikan status kesehatan aplikasi dan database
+      operationId: getHealth
+      responses:
+        '200':
+          description: Aplikasi berjalan normal
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      status:
+                        type: string
+                        example: "ok"
+                      time:
+                        type: string
+                        format: date-time
+                        example: "2024-01-15T10:30:00Z"
+                  meta:
+                    type: object
+                    nullable: true
+
+components:
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              description: Error code
+              example: "VALIDATION_ERROR"
+            message:
+              type: string
+              description: Error message in Indonesian
+              example: "Validasi gagal"
+            details:
+              type: object
+              description: Additional error details
+              nullable: true
+      required:
+        - error
+
+    SuccessResponse:
+      type: object
+      properties:
+        data:
+          type: object
+        meta:
+          type: object
+          properties:
+            page:
+              type: integer
+            limit:
+              type: integer
+            total:
+              type: integer
+          nullable: true
+      required:
+        - data
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Access token JWT untuk autentikasi
+
+security:
+  - bearerAuth: []
