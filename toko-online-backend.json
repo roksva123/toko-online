@@ -1,0 +1,94 @@
+{
+  "info": {
+    "_postman_id": "d5c3c055-7c12-4e5f-9a4c-2e0e19c5f6b7",
+    "name": "toko‑online‑backend",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Semua endpoint HTTP yang tersedia pada backend Go toko‑online. Saat ini hanya terdapat endpoint health check."
+  },
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/health",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "health"
+          ]
+        },
+        "description": "Mengembalikan status aplikasi (\"<timestamp>\"}`)."
+      },
+      "response": [
+        {
+          "name": "Sample 200 OK",
+          "originalRequest": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "health"
+              ]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"status\": \"ok\",\n  \"time\": \"2026-10-17T12:34:56Z\"\n}"
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Tidak ada kode pra‑request khusus."
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Contoh validasi sederhana:",
+          "pm.test(\"Status code is 200\", function () {",
+          "    pm.response.to.have.status(200);",
+          "});",
+          "",
+          "pm.test(\"Response body has status ok\", fun
+          "    var json = pm.response.json();",
+          "    pm.expect(json.status).to.eql(\"ok\");",
+          "});"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string",
+      "description": "Ubah nilai ini ke host/port aplikasi Anda."
+    }
+  ]
+}

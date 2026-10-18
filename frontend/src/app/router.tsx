@@ -1,9 +1,10 @@
-import { createBrowserRouter, Navigate, RouteObject } from 'react-router-dom'
+import { createBrowserRouter, Navigate, RouteObject, useLocation } from 'react-router-dom'
 import { lazy, Suspense } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { Spinner } from '@/components/ui/Spinner'
 import { RootLayout } from './RootLayout'
 import { AdminLayout } from './AdminLayout'
+
 
 // Lazy load halaman
 const LoginPage = lazy(() => import('@/features/auth/pages/LoginPage'))
@@ -39,13 +40,14 @@ function RouteGuard({ children }: { children: React.ReactNode }) {
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth()
+  const location = useLocation()
 
   if (isLoading) {
     return <Spinner fullscreen />
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />
+    return <Navigate to="/login" state={{ from: location }} replace />
   }
 
   return <RouteGuard>{children}</RouteGuard>
