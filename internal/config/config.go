@@ -1,10 +1,10 @@
 package config
 
 import (
-	"fmt"
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -166,11 +166,18 @@ func getEnvDuration(key string, defaultVal time.Duration) time.Duration {
 }
 
 func getEnvList(key string, defaultVal []string) []string {
-	if val := os.Getenv(key); val != "" {
-		// Simple comma-separated parsing
-		var list []string
-		fmt.Sscanf(val, "%s", &list)
-		return list
+	val := os.Getenv(key)
+	if val == "" {
+		return defaultVal
 	}
-	return defaultVal
+	var list []string
+	for _, item := range strings.Split(val, ",") {
+		if item = strings.TrimSpace(item); item != "" {
+			list = append(list, item)
+		}
+	}
+	if len(list) == 0 {
+		return defaultVal
+	}
+	return list
 }
