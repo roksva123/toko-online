@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { apiClient } from '@/lib/api/client'
 import { User, LoginRequest, RegisterRequest, AuthResponse } from '@/lib/api/types'
 
@@ -18,18 +18,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
-  const recoverSession = useCallback(async () => {
-    try {
-      // Coba refresh access token terlebih dahulu
-      await apiClient.post('/auth/refresh')
+  // Naik setiap kali user login/daftar/keluar. Dipakai agar hasil pemulihan sesi
+  // yang datang terlambat tidak menimpa login yang baru saja terjadi.
+  const authVersion = useRef(0)
 
-      // Ambil data user saat ini
+  const recoverSession = useCallback(async () => {
+    const version = authVersion.current
+    try {
+      // Minta access token baru dari refresh token (cookie), simpan, lalu ambil data user
+      const refreshRes = await apiClient.post<{ access_token: string }>('/auth/refresh')
+      if (authVersion.current !== version) return
+      apiClient.setAccessToken(refreshRes.data.access_token)
+
       const response = await apiClient.get<User>('/me')
+      if (authVersion.current !== version) return
       setUser(response.data)
     } catch {
-      // Session recovery gagal, user tidak terautentikasi
-      apiClient.clearAccessToken()
-      setUser(null)
+      // Tidak ada sesi aktif: user dianggap belum login
+      if (authVersion.current === version) {
+        apiClient.clearAccessToken()
+        setUser(null)
+      }
     } finally {
       setIsLoading(false)
     }
@@ -39,19 +48,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const response = await apiClient.post<AuthResponse>('/auth/login', data)
     const { access_token, user: userData } = response.data
 
+    authVersion.current++
     apiClient.setAccessToken(access_token)
     setUser(userData)
+    setIsLoading(false)
   }, [])
 
   const register = useCallback(async (data: RegisterRequest) => {
     const response = await apiClient.post<AuthResponse>('/auth/register', data)
     const { access_token, user: userData } = response.data
 
+    authVersion.current++
     apiClient.setAccessToken(access_token)
     setUser(userData)
+    setIsLoading(false)
   }, [])
 
   const logout = useCallback(async () => {
+    authVersion.current++
     try {
       await apiClient.post('/auth/logout')
     } finally {
@@ -60,7 +74,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  // Recover session saat aplikasi dibuka
+  // Pulihkan sesi saat aplikasi dibuka
   useEffect(() => {
     recoverSession()
   }, [recoverSession])
