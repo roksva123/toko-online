@@ -121,3 +121,33 @@ func (s *Store) RevokeRefreshTokenByHash(ctx context.Context, tokenHash string) 
 		 WHERE token_hash = $1 AND revoked_at IS NULL`, tokenHash)
 	return err
 }
+
+func (s *Store) UpdateUserProfile(ctx context.Context, id, name, phone string) (*User, error) {
+	return scanUser(s.pool.QueryRow(ctx,
+		`UPDATE users SET name = $2, phone = $3, updated_at = NOW()
+		 WHERE id = $1::uuid
+		 RETURNING `+userColumns,
+		id, name, phone))
+}
+
+func (s *Store) UpdatePasswordHash(ctx context.Context, id, passwordHash string) error {
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE users SET password_hash = $2, updated_at = NOW() WHERE id = $1::uuid`,
+		id, passwordHash)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// RevokeAllRefreshTokens mencabut semua sesi (refresh token) milik user,
+// dipakai setelah kata sandi diganti.
+func (s *Store) RevokeAllRefreshTokens(ctx context.Context, userID string) error {
+	_, err := s.pool.Exec(ctx,
+		`UPDATE refresh_tokens SET revoked_at = NOW()
+		 WHERE user_id = $1::uuid AND revoked_at IS NULL`, userID)
+	return err
+}

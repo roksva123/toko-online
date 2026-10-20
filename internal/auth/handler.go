@@ -63,6 +63,8 @@ func (h *Handler) Mount(r chi.Router, requireAuth func(http.Handler) http.Handle
 		r.Post("/logout", h.Logout)
 	})
 	r.With(requireAuth).Get("/me", h.Me)
+	r.With(requireAuth).Patch("/me", h.UpdateProfile)
+	r.With(requireAuth).Post("/me/password", h.ChangePassword)
 }
 
 // ---------- Request / response ----------
@@ -244,6 +246,117 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response.JSON(w, http.StatusOK, user, nil)
+}
+
+type updateProfileRequest struct {
+	Name  string `json:"name"`
+	Phone string `json:"phone"`
+}
+
+type changePasswordRequest struct {
+	CurrentPassword string `json:"current_password"`
+	NewPassword     string `json:"new_password"`
+}
+
+// UpdateProfile mengubah nama dan nomor HP milik user yang sedang login.
+func (h *Handler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
+	var req updateProfileRequest
+	if apiErr := decodeJSON(w, r, &req); apiErr != nil {
+		errx.JSON(w, apiErr)
+		return
+	}
+
+	req.Name = strings.TrimSpace(req.Name)
+	req.Phone = strings.NewReplacer(" ", "", "-", "").Replace(req.Phone)
+
+	d := map[string]interface{}{}
+	if n := len([]rune(req.Name)); n < 2 || n > 255 {
+		d["name"] = "Nama 2 sampai 255 karakter"
+	}
+	if !phoneRegex.MatchString(req.Phone) {
+		d["phone"] = "Gunakan nomor HP Indonesia, contoh 081234567890"
+	}
+	if len(d) > 0 {
+		errx.JSON(w, errx.ValidationError("Data yang dikirim tidak valid").WithDetails(d))
+		return
+	}
+
+	user, err := h.store.UpdateUserProfile(r.Context(), UserID(r.Context()), req.Name, req.Phone)
+	if errors.Is(err, ErrNotFound) {
+		errx.JSON(w, errx.Unauthorized("Akun tidak ditemukan"))
+		return
+	}
+	if err != nil {
+		internalError(w, "update profile", err)
+		return
+	}
+	response.JSON(w, http.StatusOK, user, nil)
+}
+
+// ChangePassword mengganti kata sandi, mencabut semua sesi lama,
+// lalu menerbitkan sesi baru untuk perangkat yang sedang dipakai.
+func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
+	var req changePasswordRequest
+	if apiErr := decodeJSON(w, r, &req); apiErr != nil {
+		errx.JSON(w, apiErr)
+		return
+	}
+
+	d := map[string]interface{}{}
+	if req.CurrentPassword == "" {
+		d["current_password"] = "Kata sandi saat ini wajib diisi"
+	}
+	switch {
+	case len([]rune(req.NewPassword)) < minPasswordLen:
+		d["new_password"] = "Kata sandi baru minimal 8 karakter"
+	case len(req.NewPassword) > maxPasswordLen:
+		d["new_password"] = "Kata sandi baru maksimal 72 karakter"
+	case req.NewPassword == req.CurrentPassword:
+		d["new_password"] = "Kata sandi baru harus berbeda dari yang lama"
+	}
+	if len(d) > 0 {
+		errx.JSON(w, errx.ValidationError("Data yang dikirim tidak valid").WithDetails(d))
+		return
+	}
+
+	ctx := r.Context()
+	user, err := h.store.GetUserByID(ctx, UserID(ctx))
+	if errors.Is(err, ErrNotFound) {
+		errx.JSON(w, errx.Unauthorized("Akun tidak ditemukan"))
+		return
+	}
+	if err != nil {
+		internalError(w, "get user", err)
+		return
+	}
+
+	// Sengaja bukan 401: respons 401 akan memicu refresh otomatis di frontend
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.CurrentPassword)); err != nil {
+		errx.JSON(w, errx.ValidationError("Kata sandi saat ini salah").
+			WithDetails(map[string]interface{}{"current_password": "Kata sandi saat ini salah"}))
+		return
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcryptCost)
+	if err != nil {
+		internalError(w, "hash password", err)
+		return
+	}
+	if err := h.store.UpdatePasswordHash(ctx, user.ID, string(hash)); err != nil {
+		internalError(w, "update password", err)
+		return
+	}
+	if err := h.store.RevokeAllRefreshTokens(ctx, user.ID); err != nil {
+		internalError(w, "revoke sessions", err)
+		return
+	}
+
+	access, err := h.issueSession(w, r, user)
+	if err != nil {
+		internalError(w, "issue session", err)
+		return
+	}
+	response.JSON(w, http.StatusOK, map[string]string{"access_token": access}, nil)
 }
 
 // ---------- Helpers ----------

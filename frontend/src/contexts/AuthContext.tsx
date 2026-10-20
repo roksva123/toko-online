@@ -10,6 +10,7 @@ interface AuthContextType {
   register: (data: RegisterRequest) => Promise<void>
   logout: () => Promise<void>
   recoverSession: () => Promise<void>
+  updateUser: (user: User) => void
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -74,6 +75,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
+  // Dipakai setelah profil diubah supaya header dan halaman lain ikut berubah
+  const updateUser = useCallback((updated: User) => {
+    setUser(updated)
+  }, [])
+
   // Pulihkan sesi saat aplikasi dibuka
   useEffect(() => {
     recoverSession()
@@ -89,6 +95,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         register,
         logout,
         recoverSession,
+        updateUser,
       }}
     >
       {children}
