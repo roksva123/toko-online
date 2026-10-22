@@ -1,8 +1,11 @@
 package auth
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"regexp"
@@ -28,11 +31,14 @@ const (
 	// Mencegah logout palsu saat dua request refresh terkirim hampir bersamaan
 	// (mis. React StrictMode di mode dev memanggil recoverSession dua kali).
 	refreshGracePeriod = 10 * time.Second
+
+	// Masa berlaku token reset kata sandi
+	passwordResetTTL = 30 * time.Minute
 )
 
 var (
-	emailRegex = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
-	phoneRegex = regexp.MustCompile(`^(?:\+62|62|0)8\d{8,11}$`)
+	emailRegex = regexp.MustCompile(`^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$`)
+	phoneRegex = regexp.MustCompile(`^(?:\\+62|62|0)8\\d{8,11}$`)
 
 	// Hash palsu untuk menyamakan waktu respons saat email tidak ditemukan
 	dummyHash, _ = bcrypt.GenerateFromPassword([]byte("dummy-password"), bcryptCost)
@@ -61,6 +67,8 @@ func (h *Handler) Mount(r chi.Router, requireAuth func(http.Handler) http.Handle
 		r.Post("/login", h.Login)
 		r.Post("/refresh", h.Refresh)
 		r.Post("/logout", h.Logout)
+		r.Post("/forgot-password", h.ForgotPassword) // New route
+		r.Post("/reset-password", h.ResetPassword)   // New route
 	})
 	r.With(requireAuth).Get("/me", h.Me)
 	r.With(requireAuth).Patch("/me", h.UpdateProfile)
@@ -84,6 +92,25 @@ type loginRequest struct {
 type authResponse struct {
 	AccessToken string `json:"access_token"`
 	User        *User  `json:"user"`
+}
+
+type updateProfileRequest struct {
+	Name  string `json:"name"`
+	Phone string `json:"phone"`
+}
+
+type changePasswordRequest struct {
+	CurrentPassword string `json:"current_password"`
+	NewPassword     string `json:"new_password"`
+}
+
+type forgotPasswordRequest struct {
+	Email string `json:"email"`
+}
+
+type resetPasswordRequest struct {
+	Token       string `json:"token"`
+	NewPassword string `json:"new_password"`
 }
 
 // ---------- Handlers ----------
@@ -248,16 +275,6 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, user, nil)
 }
 
-type updateProfileRequest struct {
-	Name  string `json:"name"`
-	Phone string `json:"phone"`
-}
-
-type changePasswordRequest struct {
-	CurrentPassword string `json:"current_password"`
-	NewPassword     string `json:"new_password"`
-}
-
 // UpdateProfile mengubah nama dan nomor HP milik user yang sedang login.
 func (h *Handler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	var req updateProfileRequest
@@ -359,6 +376,135 @@ func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, map[string]string{"access_token": access}, nil)
 }
 
+// ForgotPassword menangani permintaan reset kata sandi dengan mengirim email.
+func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
+	var req forgotPasswordRequest
+	if apiErr := decodeJSON(w, r, &req); apiErr != nil {
+		errx.JSON(w, apiErr)
+		return
+	}
+
+	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+
+	d := map[string]interface{}{}
+	if !emailRegex.MatchString(req.Email) || len(req.Email) > 255 {
+		d["email"] = "Format email tidak valid"
+	}
+	if len(d) > 0 {
+		errx.JSON(w, errx.ValidationError("Data yang dikirim tidak valid").WithDetails(d))
+		return
+	}
+
+	// Dapatkan user, tapi jangan tampilkan error jika tidak ditemukan
+	// untuk mencegah enumerasi email.
+	user, err := h.store.GetUserByEmail(r.Context(), req.Email)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			slog.Info("forgot password: email not found, sending dummy response", slog.String("email", req.Email))
+			response.Empty(w, http.StatusNoContent)
+			return
+		}
+		internalError(w, "get user by email for password reset", err)
+		return
+	}
+
+	// Hasilkan token reset kata sandi
+	rawToken, tokenHash, err := NewPasswordResetToken()
+	if err != nil {
+		internalError(w, "generate password reset token", err)
+		return
+	}
+
+	expiresAt := time.Now().Add(passwordResetTTL)
+	err = h.store.InsertPasswordResetToken(r.Context(), user.ID, tokenHash, expiresAt)
+	if err != nil {
+		internalError(w, "insert password reset token", err)
+		return
+	}
+
+	// TODO: Ganti dengan URL frontend yang sebenarnya
+	resetLink := fmt.Sprintf("http://localhost:3000/reset-password?token=%s", rawToken)
+	sendPasswordResetEmail(user.Email, resetLink)
+
+	response.Empty(w, http.StatusNoContent)
+}
+
+// ResetPassword menangani penggantian kata sandi dengan token reset.
+func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
+	var req resetPasswordRequest
+	if apiErr := decodeJSON(w, r, &req); apiErr != nil {
+		errx.JSON(w, apiErr)
+		return
+	}
+
+	req.Token = strings.TrimSpace(req.Token)
+
+	d := validatePasswordReset(req)
+	if len(d) > 0 {
+		errx.JSON(w, errx.ValidationError("Data yang dikirim tidak valid").WithDetails(d))
+		return
+	}
+
+	tokenHash := HashToken(req.Token)
+	resetToken, err := h.store.GetPasswordResetToken(r.Context(), tokenHash)
+	if errors.Is(err, ErrNotFound) {
+		errx.JSON(w, errx.ValidationError("Token reset tidak valid atau sudah digunakan").
+			WithDetails(map[string]interface{}{"token": "Token reset tidak valid atau sudah digunakan"}))
+		return
+	}
+	if err != nil {
+		internalError(w, "get password reset token", err)
+		return
+	}
+
+	now := time.Now()
+	if now.After(resetToken.ExpiresAt) || resetToken.UsedAt != nil {
+		errx.JSON(w, errx.ValidationError("Token reset tidak valid atau sudah digunakan").
+			WithDetails(map[string]interface{}{"token": "Token reset tidak valid atau sudah digunakan"}))
+		return
+	}
+
+	user, err := h.store.GetUserByID(r.Context(), resetToken.UserID)
+	if errors.Is(err, ErrNotFound) {
+		internalError(w, "get user by id from reset token", errors.New("user not found for valid reset token"))
+		errx.JSON(w, errx.InternalServerError("Terjadi kesalahan pada server"))
+		return
+	}
+	if err != nil {
+		internalError(w, "get user by id from reset token", err)
+		return
+	}
+
+	// Hash kata sandi baru
+	newPasswordHash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcryptCost)
+	if err != nil {
+		internalError(w, "hash new password for reset", err)
+		return
+	}
+
+	// Update kata sandi user
+	err = h.store.UpdatePasswordHash(r.Context(), user.ID, string(newPasswordHash))
+	if err != nil {
+		internalError(w, "update user password after reset", err)
+		return
+	}
+
+	// Tandai token reset sebagai sudah digunakan
+	err = h.store.UsePasswordResetToken(r.Context(), resetToken.ID)
+	if err != nil {
+		slog.Error("failed to mark password reset token as used", slog.Any("error", err), slog.String("token_id", resetToken.ID))
+		// Lanjutkan saja, jangan sampai gagal karena gagal memperbarui token
+	}
+
+	// Cabut semua sesi lama user
+	if err := h.store.RevokeAllRefreshTokens(r.Context(), user.ID); err != nil {
+		slog.Error("failed to revoke all refresh tokens after password reset", slog.Any("error", err), slog.String("user_id", user.ID))
+		// Lanjutkan saja, jangan sampai gagal karena gagal mencabut sesi
+	}
+
+	response.Empty(w, http.StatusNoContent)
+}
+
 // ---------- Helpers ----------
 
 func (h *Handler) issueSession(w http.ResponseWriter, r *http.Request, user *User) (string, error) {
@@ -427,6 +573,40 @@ func validateRegister(req registerRequest) map[string]interface{} {
 	}
 
 	return d
+}
+
+func validatePasswordReset(req resetPasswordRequest) map[string]interface{} {
+	d := map[string]interface{}{}
+
+	if req.Token == "" {
+		d["token"] = "Token reset wajib diisi"
+	}
+
+	switch {
+	case len([]rune(req.NewPassword)) < minPasswordLen:
+		d["new_password"] = "Kata sandi baru minimal 8 karakter"
+	case len(req.NewPassword) > maxPasswordLen:
+		d["new_password"] = "Kata sandi baru maksimal 72 karakter"
+	}
+
+	return d
+}
+
+func NewPasswordResetToken() (raw string, hash string, err error) {
+	b := make([]byte, 32)
+	if _, err = rand.Read(b); err != nil {
+		return "", "", err
+	}
+	raw = hex.EncodeToString(b)
+	return raw, HashToken(raw), nil
+}
+
+func sendPasswordResetEmail(email, resetLink string) {
+	slog.Info("Password Reset Email Sent",
+		slog.String("to", email),
+		slog.String("subject", "Reset Kata Sandi Akun Toko Online Anda"),
+		slog.String("body", fmt.Sprintf("Halo,\n\nUntuk mereset kata sandi Anda, klik tautan berikut:\n%s\n\nTautan ini akan kedaluwarsa dalam 30 menit.\n\nJika Anda tidak meminta reset kata sandi, harap abaikan email ini.\n\nSalam,\nTim Toko Online", resetLink)),
+	)
 }
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) *errx.APIError {

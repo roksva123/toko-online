@@ -59,13 +59,14 @@ type ProductDetail struct {
 }
 
 type variantInput struct {
-	ID         string `json:"id"` // kosong = varian baru
-	SKU        string `json:"sku"`
-	Name       string `json:"name"`
-	Price      int64  `json:"price"`
-	Stock      int    `json:"stock"`
-	WeightGram int    `json:"weight_gram"`
-	IsActive   *bool  `json:"is_active"`
+	ID                 string   `json:"id"` // kosong = varian baru
+	SKU                string   `json:"sku"`
+	Name               string   `json:"name"`
+	Price              int64    `json:"price"`
+	Stock              int      `json:"stock"`
+	WeightGram         int      `json:"weight_gram"`
+	IsActive           *bool    `json:"is_active"`
+	AttributeOptionIDs []string `json:"attribute_option_ids"`
 }
 
 type productInput struct {

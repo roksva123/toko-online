@@ -1,23 +1,13 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Helmet } from 'react-helmet-async'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { apiClient } from '@/lib/api/client'
 import { useCart } from '@/contexts/CartContext'
-import { Button, Card, CardBody, Badge, Skeleton, Modal, Input, Select, EmptyState, ErrorState } from '@/components/ui'
+import { Button, Card, CardBody, Badge, Skeleton, EmptyState, ErrorState } from '@/components/ui'
 import { formatRupiah } from '@/lib/utils'
-
-interface Address {
-  id: string
-  recipient_name: string
-  phone: string
-  address: string
-  district: string
-  city: string
-  province: string
-  postal_code: string
-  is_default: boolean
-}
+import { AddressFormModal } from '@/features/account/components/AddressFormModal'
+import { addressKeys, fetchAddresses, parseApiError } from '@/lib/api/addresses'
 
 interface ShippingRate {
   courier: string
@@ -28,6 +18,8 @@ interface ShippingRate {
 
 type Step = 'address' | 'shipping' | 'summary'
 
+const MAX_ADDRESSES = 10
+
 export default function CheckoutPage() {
   const navigate = useNavigate()
   const { items, subtotal, clearCart } = useCart()
@@ -37,24 +29,30 @@ export default function CheckoutPage() {
   const [notes, setNotes] = useState('')
   const [isAddressModalOpen, setIsAddressModalOpen] = useState(false)
 
-  // Fetch addresses
+  // Alamat milik user dari database
   const { data: addressesData, isLoading: addressesLoading } = useQuery({
-    queryKey: ['addresses'],
-    queryFn: async () => {
-      const response = await apiClient.get<{ data: Address[] }>('/addresses')
-      return response.data
-    },
+    queryKey: addressKeys.all,
+    queryFn: fetchAddresses,
   })
 
-  const addresses = addressesData?.data || []
+  const addresses = addressesData ?? []
   const selectedAddress = addresses.find((a) => a.id === selectedAddressId)
+
+  // Pilih alamat utama (atau alamat pertama) secara otomatis, dan pilih ulang
+  // jika alamat yang terpilih sudah tidak ada (mis. dihapus di tab lain)
+  useEffect(() => {
+    if (!addressesData || addressesData.length === 0) return
+    if (selectedAddressId && addressesData.some((a) => a.id === selectedAddressId)) return
+    const preferred = addressesData.find((a) => a.is_default) ?? addressesData[0]
+    setSelectedAddressId(preferred.id)
+  }, [addressesData, selectedAddressId])
 
   // Fetch shipping rates
   const { data: shippingRates, isLoading: shippingLoading } = useQuery({
     queryKey: ['shipping-rates', selectedAddressId],
     queryFn: async () => {
       if (!selectedAddressId) return null
-      const response = await apiClient.post<{ data: ShippingRate[] }>('/shipping/rates', {
+      const response = await apiClient.post<ShippingRate[]>('/shipping/rates', {
         destination_city_id: '123', // TODO: Get from address
         weight: 1000, // TODO: Calculate from products
       })
@@ -66,7 +64,7 @@ export default function CheckoutPage() {
   // Create order mutation
   const createOrderMutation = useMutation({
     mutationFn: async () => {
-      const response = await apiClient.post('/orders', {
+      const response = await apiClient.post<{ id: string }>('/orders', {
         address_id: selectedAddressId,
         courier: selectedShipping?.courier,
         service: selectedShipping?.service,
@@ -74,9 +72,9 @@ export default function CheckoutPage() {
       })
       return response.data
     },
-    onSuccess: (data: any) => {
+    onSuccess: (order) => {
       clearCart()
-      navigate(`/orders/${data.data.id}/payment`)
+      navigate(`/orders/${order.id}/payment`)
     },
   })
 
@@ -95,6 +93,7 @@ export default function CheckoutPage() {
 
   const shippingCost = 0 // TODO: Calculate from selected shipping
   const total = subtotal + shippingCost
+  const atAddressLimit = addresses.length >= MAX_ADDRESSES
 
   return (
     <>
@@ -174,7 +173,10 @@ export default function CheckoutPage() {
                               <p className="font-semibold">{addr.recipient_name}</p>
                               <p className="text-sm text-gray-600">{addr.phone}</p>
                             </div>
-                            {addr.is_default && <Badge variant="info">Default</Badge>}
+                            <div className="flex gap-1.5">
+                              <Badge variant="default">{addr.label}</Badge>
+                              {addr.is_default && <Badge variant="info">Utama</Badge>}
+                            </div>
                           </div>
                           <p className="text-sm text-gray-700">{addr.address}</p>
                           <p className="text-sm text-gray-600">
@@ -185,9 +187,16 @@ export default function CheckoutPage() {
                     </div>
                   )}
 
-                  <Button variant="secondary" fullWidth onClick={() => setIsAddressModalOpen(true)}>
-                    + Tambah Alamat Baru
-                  </Button>
+                  {addresses.length > 0 && (
+                    <Button
+                      variant="secondary"
+                      fullWidth
+                      disabled={atAddressLimit}
+                      onClick={() => setIsAddressModalOpen(true)}
+                    >
+                      {atAddressLimit ? `Batas ${MAX_ADDRESSES} alamat tercapai` : '+ Tambah Alamat Baru'}
+                    </Button>
+                  )}
 
                   {selectedAddressId && (
                     <Button
@@ -211,14 +220,14 @@ export default function CheckoutPage() {
 
                   {shippingLoading ? (
                     <Skeleton count={3} className="h-20 mb-2" />
-                  ) : !shippingRates || shippingRates.data.length === 0 ? (
+                  ) : !shippingRates || shippingRates.length === 0 ? (
                     <ErrorState
                       title="Tidak Ada Pilihan Pengiriman"
                       message="Kurir tidak tersedia untuk area ini."
                     />
                   ) : (
                     <div className="space-y-3 mb-4">
-                      {shippingRates.data.map((rate) => (
+                      {shippingRates.map((rate) => (
                         <button
                           key={`${rate.courier}-${rate.service}`}
                           onClick={() =>
@@ -326,6 +335,15 @@ export default function CheckoutPage() {
                   </CardBody>
                 </Card>
 
+                {createOrderMutation.isError && (
+                  <div
+                    role="alert"
+                    className="rounded border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700"
+                  >
+                    {parseApiError(createOrderMutation.error).message}
+                  </div>
+                )}
+
                 <div className="flex gap-3">
                   <Button variant="secondary" fullWidth onClick={() => setCurrentStep('shipping')}>
                     Kembali
@@ -368,31 +386,13 @@ export default function CheckoutPage() {
         </div>
       </div>
 
-      {/* Add Address Modal */}
-      <Modal
+      {/* Tambah alamat: langsung tersimpan ke database lalu otomatis terpilih */}
+      <AddressFormModal
         isOpen={isAddressModalOpen}
         onClose={() => setIsAddressModalOpen(false)}
-        title="Tambah Alamat Baru"
-        size="md"
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setIsAddressModalOpen(false)}>
-              Batal
-            </Button>
-            <Button variant="primary">Simpan Alamat</Button>
-          </>
-        }
-      >
-        <div className="space-y-3">
-          <Input label="Nama Penerima" placeholder="John Doe" />
-          <Input label="Nomor Telepon" placeholder="08123456789" />
-          <Input label="Alamat Lengkap" placeholder="Jl. Contoh No. 123" />
-          <Input label="Kecamatan" placeholder="Kelapa Gading" />
-          <Input label="Kota" placeholder="Jakarta Utara" />
-          <Input label="Provinsi" placeholder="DKI Jakarta" />
-          <Input label="Kode Pos" placeholder="14150" />
-        </div>
-      </Modal>
+        isFirstAddress={addresses.length === 0}
+        onSaved={(saved) => setSelectedAddressId(saved.id)}
+      />
     </>
   )
 }
