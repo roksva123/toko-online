@@ -43,19 +43,32 @@ type ProductSummary struct {
 }
 
 type Variant struct {
-	ID         string `json:"id"`
-	ProductID  string `json:"product_id"`
-	SKU        string `json:"sku"`
-	Name       string `json:"name"`
-	Price      int64  `json:"price"`
-	Stock      int    `json:"stock"`
-	WeightGram int    `json:"weight_gram"`
-	IsActive   bool   `json:"is_active"`
+	ID                 string   `json:"id"`
+	ProductID          string   `json:"product_id"`
+	SKU                string   `json:"sku"`
+	Name               string   `json:"name"`
+	Price              int64    `json:"price"`
+	Stock              int      `json:"stock"`
+	WeightGram         int      `json:"weight_gram"`
+	IsActive           bool     `json:"is_active"`
+	AttributeOptionIDs []string `json:"attribute_option_ids"`
+}
+
+type Attribute struct {
+	ID      string   `json:"id"`
+	Name    string   `json:"name"`
+	Options []Option `json:"options"`
+}
+
+type Option struct {
+	ID    string `json:"id"`
+	Value string `json:"value"`
 }
 
 type ProductDetail struct {
 	ProductSummary
-	Variants []Variant `json:"variants"`
+	Variants   []Variant   `json:"variants"`
+	Attributes []Attribute `json:"attributes"`
 }
 
 type variantInput struct {
@@ -264,7 +277,56 @@ func (s *Store) GetProduct(ctx context.Context, id string) (*ProductDetail, erro
 		return nil, err
 	}
 
-	return &ProductDetail{ProductSummary: *p, Variants: variants}, nil
+	// Mengambil atribut produk
+	attrRows, err := s.pool.Query(ctx, `
+		SELECT a.id::text, a.name, ao.id::text, ao.value
+		FROM attributes a
+		JOIN attribute_options ao ON ao.attribute_id = a.id
+		WHERE a.product_id = $1::uuid
+		ORDER BY a.name, ao.value`, id)
+	if err != nil {
+		return nil, err
+	}
+	defer attrRows.Close()
+
+	attrMap := make(map[string]*Attribute)
+	for attrRows.Next() {
+		var attrID, attrName, optID, optValue string
+		if err := attrRows.Scan(&attrID, &attrName, &optID, &optValue); err != nil {
+			return nil, err
+		}
+		if _, ok := attrMap[attrID]; !ok {
+			attrMap[attrID] = &Attribute{ID: attrID, Name: attrName, Options: []Option{}}
+		}
+		attrMap[attrID].Options = append(attrMap[attrID].Options, Option{ID: optID, Value: optValue})
+	}
+	attributes := make([]Attribute, 0)
+	for _, a := range attrMap {
+		attributes = append(attributes, *a)
+	}
+
+	// Mengisi AttributeOptionIDs untuk setiap varian
+	for i := range variants {
+		variants[i].AttributeOptionIDs = make([]string, 0)
+		vRows, err := s.pool.Query(ctx, `
+			SELECT attribute_option_id::text
+			FROM variant_attribute_values
+			WHERE variant_id = $1::uuid`, variants[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		for vRows.Next() {
+			var optID string
+			if err := vRows.Scan(&optID); err != nil {
+				vRows.Close()
+				return nil, err
+			}
+			variants[i].AttributeOptionIDs = append(variants[i].AttributeOptionIDs, optID)
+		}
+		vRows.Close()
+	}
+
+	return &ProductDetail{ProductSummary: *p, Variants: variants, Attributes: attributes}, nil
 }
 
 // ConflictingSKUs mengembalikan SKU di daftar yang sudah dipakai produk lain.
@@ -305,7 +367,19 @@ func insertVariant(ctx context.Context, tx pgx.Tx, productID string, v variantIn
 		return err
 	}
 	if v.Stock > 0 {
-		return insertStockMovement(ctx, tx, variantID, v.Stock, "initial_stock")
+		if err := insertStockMovement(ctx, tx, variantID, v.Stock, "initial_stock"); err != nil {
+			return err
+		}
+	}
+
+	for _, optID := range v.AttributeOptionIDs {
+		_, err := tx.Exec(ctx, `
+			INSERT INTO variant_attribute_values (variant_id, attribute_option_id)
+			VALUES ($1::uuid, $2::uuid)`,
+			variantID, optID)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -443,6 +517,24 @@ func (s *Store) UpdateProduct(ctx context.Context, id string, in productInput, s
 			if _, err := tx.Exec(ctx,
 				`UPDATE product_variants SET is_active = FALSE, updated_at = NOW() WHERE id = $1::uuid`,
 				vid); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Hapus atribut lama dan tambahkan yang baru
+	for _, v := range in.Variants {
+		if v.ID == "" {
+			continue
+		}
+		if _, err := tx.Exec(ctx, `DELETE FROM variant_attribute_values WHERE variant_id = $1::uuid`, v.ID); err != nil {
+			return err
+		}
+		for _, optID := range v.AttributeOptionIDs {
+			if _, err := tx.Exec(ctx, `
+				INSERT INTO variant_attribute_values (variant_id, attribute_option_id)
+				VALUES ($1::uuid, $2::uuid)`,
+				v.ID, optID); err != nil {
 				return err
 			}
 		}

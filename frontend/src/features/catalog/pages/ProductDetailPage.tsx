@@ -23,10 +23,22 @@ export default function ProductDetailPage() {
   })
 
   const [variantId, setVariantId] = useState('')
+  const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({})
   const [quantity, setQuantity] = useState(1)
   const [imageIndex, setImageIndex] = useState(0)
   const [notice, setNotice] = useState<{ type: 'success' | 'warning'; text: string } | null>(null)
   const { items: cartItems, addItem } = useCart()
+
+  // Sinkronisasi seleksi atribut ke variantId
+  useEffect(() => {
+    if (!product) return
+    const match = product.variants.find((v) =>
+      Object.entries(selectedOptions).every(([_, optId]) =>
+        v.attribute_option_ids.includes(optId)
+      )
+    )
+    if (match) setVariantId(match.id)
+  }, [selectedOptions, product])
 
   // Setiap membuka produk baru: pilih varian pertama yang stoknya ada
   const productId = product?.id
@@ -34,6 +46,7 @@ export default function ProductDetailPage() {
     if (!product) return
     const first = product.variants.find((v) => v.stock > 0) ?? product.variants[0]
     setVariantId(first?.id ?? '')
+    setSelectedOptions({}) // Reset atribut saat pindah produk
     setQuantity(1)
     setImageIndex(0)
     setNotice(null)
@@ -210,35 +223,50 @@ export default function ProductDetailPage() {
             <p className="text-3xl font-bold text-primary-600 mt-4">{priceLabel}</p>
 
             {/* Varian */}
-            {product.variants.length > 1 && (
-              <div className="mt-6">
-                <p className="text-sm font-medium text-gray-700 mb-2">
-                  Pilih varian
-                  {variant && <span className="font-normal text-gray-500">: {variant.name}</span>}
-                </p>
-                <div className="flex flex-wrap gap-2">
+            <div className="mt-6">
+              <p className="text-sm font-medium text-gray-700 mb-2">
+                Varian: <span className="font-normal text-gray-500">{variant?.name}</span>
+              </p>
+              {product.variants.length > 1 && (
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                   {product.variants.map((v) => {
                     const selected = v.id === variantId
                     const habis = v.stock === 0
+
+                    // Mencari nama atribut untuk varian ini jika ada (misal: "Merah / XL")
+                    const attrNames = v.attribute_option_ids
+                      .map((oid: string) => {
+                        for (const attr of product.attributes) {
+                          const opt = attr.options.find((o: { id: string; value: string }) => o.id === oid)
+                          if (opt) return opt.value
+                        }
+                        return null
+                      })
+                      .filter(Boolean)
+                      .join(' / ')
+
                     return (
                       <button
                         key={v.id}
                         type="button"
                         onClick={() => selectVariant(v.id)}
                         aria-pressed={selected}
-                        className={`px-4 py-2 rounded border text-sm transition-colors ${
+                        className={`flex flex-col items-center justify-center p-3 rounded-lg border-2 text-sm transition-all duration-200 ${
                           selected
-                            ? 'border-primary-600 bg-primary-50 text-primary-700 font-medium'
-                            : 'border-gray-300 text-gray-700 hover:border-gray-400'
-                        } ${habis ? 'opacity-50 line-through' : ''}`}
+                            ? 'border-primary-600 bg-primary-50 text-primary-900 shadow-sm'
+                            : 'border-gray-200 text-gray-700 hover:border-gray-300 bg-white'
+                        } ${habis ? 'opacity-50 cursor-not-allowed bg-gray-50' : ''}`}
                       >
-                        {v.name}
+                        <span className="font-semibold">{v.name}</span>
+                        {attrNames && (
+                          <span className="text-xs text-gray-500 mt-1">{attrNames}</span>
+                        )}
                       </button>
                     )
                   })}
                 </div>
-              </div>
-            )}
+              )}
+            </div>
 
             {/* Stok */}
             <div className="mt-4 text-sm">

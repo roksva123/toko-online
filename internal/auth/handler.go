@@ -422,7 +422,7 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Ganti dengan URL frontend yang sebenarnya
+	// TODO: Ganti dengan URL frontend yang sebenarnya dari config
 	resetLink := fmt.Sprintf("http://localhost:3000/reset-password?token=%s", rawToken)
 	sendPasswordResetEmail(user.Email, resetLink)
 
