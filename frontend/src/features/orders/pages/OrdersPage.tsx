@@ -10,18 +10,20 @@ interface Order {
   id: string
   order_number: string
   total: number
-  status: 'pending_payment' | 'processing' | 'shipped' | 'delivered' | 'cancelled'
+  status: 'pending_payment' | 'paid' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'expired'
   created_at: string
   items: Array<{ product_name: string; quantity: number }>
 }
 
-interface OrdersResponse {
-  data: Order[]
-  meta: {
-    page: number
-    limit: number
-    total: number
-  }
+interface OrdersMeta {
+  page: number
+  limit: number
+  total: number
+}
+
+interface OrdersResult {
+  items: Order[]
+  meta: OrdersMeta
 }
 
 export default function OrdersPage() {
@@ -36,26 +38,46 @@ export default function OrdersPage() {
       params.set('page', page.toString())
       params.set('limit', '10')
 
-      const response = await apiClient.get<OrdersResponse>(`/orders?${params.toString()}`)
-      return response.data
+      const response = await apiClient.get<Order[]>(`/orders?${params.toString()}`)
+      return {
+        items: response.data,
+        meta: {
+          page: response.meta?.page ?? page,
+          limit: response.meta?.limit ?? 10,
+          total: response.meta?.total ?? 0,
+        },
+      } satisfies OrdersResult
     },
   })
 
   const tabs = [
     { id: 'all', label: 'Semua' },
     { id: 'pending_payment', label: 'Menunggu Bayar' },
+    { id: 'paid', label: 'Dibayar' },
     { id: 'processing', label: 'Diproses' },
     { id: 'shipped', label: 'Dikirim' },
     { id: 'delivered', label: 'Tiba' },
     { id: 'cancelled', label: 'Dibatalkan' },
   ]
 
-  const statusColors: Record<string, 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled'> = {
+  const statusColors: Record<string, 'default' | 'pending' | 'success' | 'processing' | 'shipped' | 'delivered' | 'cancelled'> = {
     pending_payment: 'pending',
+    paid: 'success',
     processing: 'processing',
     shipped: 'shipped',
     delivered: 'delivered',
     cancelled: 'cancelled',
+    expired: 'default',
+  }
+
+  const statusLabels: Record<string, string> = {
+    pending_payment: 'Menunggu Pembayaran',
+    paid: 'Dibayar',
+    processing: 'Diproses',
+    shipped: 'Dikirim',
+    delivered: 'Tiba',
+    cancelled: 'Dibatalkan',
+    expired: 'Kedaluwarsa',
   }
 
   return (
@@ -86,23 +108,19 @@ export default function OrdersPage() {
             Array.from({ length: 3 }).map((_, i) => (
               <Skeleton key={i} className="h-24" />
             ))
-          ) : data && data.data.length > 0 ? (
+          ) : data && data.items.length > 0 ? (
             <>
-              {data.data.map((order) => (
+              {data.items.map((order) => (
                 <Link key={order.id} to={`/orders/${order.id}`}>
                   <Card className="hover:shadow-lg transition-shadow cursor-pointer">
                     <CardBody>
                       <div className="flex justify-between items-start mb-3">
                         <div>
-                          <p className="text-sm text-gray-600">Nomor Pesanan</p>
+                          <p className="text-sm text-gray-600 dark:text-gray-400">Nomor Pesanan</p>
                           <p className="font-bold">{order.order_number}</p>
                         </div>
                         <Badge variant={statusColors[order.status] || 'default'}>
-                          {order.status === 'pending_payment' && 'Menunggu Pembayaran'}
-                          {order.status === 'processing' && 'Diproses'}
-                          {order.status === 'shipped' && 'Dikirim'}
-                          {order.status === 'delivered' && 'Tiba'}
-                          {order.status === 'cancelled' && 'Dibatalkan'}
+                          {statusLabels[order.status] ?? order.status}
                         </Badge>
                       </div>
 
@@ -111,7 +129,7 @@ export default function OrdersPage() {
                           <p className="text-sm text-gray-600 mb-2">
                             {order.items.map((item) => `${item.product_name} (${item.quantity})`).join(', ')}
                           </p>
-                          <p className="text-xs text-gray-500">{formatDate(order.created_at)}</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">{formatDate(order.created_at)}</p>
                         </div>
                         <div className="text-right">
                           <p className="font-bold text-primary-600">{formatRupiah(order.total)}</p>

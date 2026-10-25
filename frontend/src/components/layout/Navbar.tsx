@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useCart } from '@/contexts/CartContext'
-import { Button } from './ui/Button'
+import { useTheme } from '@/contexts/ThemeContext'
 
 export function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
@@ -10,7 +10,7 @@ export function Navbar() {
   const { user, logout, isAuthenticated } = useAuth()
   const { totalItems } = useCart()
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
+  const { theme, toggleTheme } = useTheme()
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
@@ -26,7 +26,7 @@ export function Navbar() {
   }
 
   return (
-    <nav className="bg-white border-b border-gray-200 sticky top-0 z-40">
+    <nav className="bg-white border-b border-gray-200 sticky top-0 z-40 dark:bg-gray-900 dark:border-gray-700">
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
@@ -43,7 +43,7 @@ export function Navbar() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Cari produk..."
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-l text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-l text-sm bg-white text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-400"
               />
               <button
                 type="submit"
@@ -56,10 +56,20 @@ export function Navbar() {
 
           {/* Right side menu */}
           <div className="flex items-center gap-4">
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="p-2 text-gray-600 hover:text-primary-600 dark:text-gray-300"
+              aria-label={theme === 'dark' ? 'Gunakan mode terang' : 'Gunakan mode gelap'}
+              title={theme === 'dark' ? 'Mode terang' : 'Mode gelap'}
+            >
+              {theme === 'dark' ? '☀️' : '🌙'}
+            </button>
+
             {/* Cart icon */}
             <Link
               to="/cart"
-              className="relative p-2 text-gray-600 hover:text-primary-600 transition-colors"
+              className="relative p-2 text-gray-600 hover:text-primary-600 transition-colors dark:text-gray-300"
               aria-label="Keranjang"
             >
               <span className="text-2xl">🛒</span>
@@ -74,13 +84,13 @@ export function Navbar() {
             <div className="hidden md:flex items-center gap-2">
               {isAuthenticated ? (
                 <div className="flex items-center gap-3">
-                  <span className="text-sm text-gray-700">{user?.name}</span>
-                  <Link to="/account" className="text-sm text-gray-600 hover:text-gray-900">
+                  <span className="text-sm text-gray-700 dark:text-gray-200">{user?.name}</span>
+                  <Link to="/account" className="text-sm text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white">
                     Profil
                   </Link>
                   <button
                     onClick={handleLogout}
-                    className="text-sm text-gray-600 hover:text-gray-900"
+                    className="text-sm text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white"
                   >
                     Keluar
                   </button>
@@ -110,7 +120,7 @@ export function Navbar() {
 
         {/* Mobile Search */}
         {isMenuOpen && (
-          <form onSubmit={handleSearch} className="md:hidden py-3 border-t border-gray-200">
+          <form onSubmit={handleSearch} className="md:hidden py-3 border-t border-gray-200 dark:border-gray-700">
             <div className="flex gap-2">
               <input
                 type="text"
@@ -131,7 +141,7 @@ export function Navbar() {
 
         {/* Mobile Menu */}
         {isMenuOpen && (
-          <div className="md:hidden py-3 border-t border-gray-200 space-y-3">
+          <div className="md:hidden py-3 border-t border-gray-200 dark:border-gray-700 space-y-3">
             <Link to="/products" className="block text-sm text-gray-700 hover:text-primary-600">
               Produk
             </Link>

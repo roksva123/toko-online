@@ -22,7 +22,7 @@ import {
   formatRupiah,
   parseApiError,
 } from '@/lib/api/admin'
-import { ProductForm } from '../components/ProductForm'
+import { ProductForm } from '@/features/admin/components/ProductForm'
 
 const PAGE_SIZE = 20
 
@@ -121,7 +121,7 @@ export default function AdminProducts() {
         <ProductForm
           productId={view.productId}
           onCancel={() => setView({ mode: 'list' })}
-          onSaved={(message) => {
+          onSaved={(message: string) => {
             setNotice(message)
             setView({ mode: 'list' })
           }}
@@ -138,8 +138,8 @@ export default function AdminProducts() {
 
       <div className="flex items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Produk</h1>
-          <p className="text-gray-600 text-sm mt-1">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Produk</h1>
+          <p className="text-gray-600 dark:text-gray-400 text-sm mt-1">
             {total > 0 ? `${total} produk` : 'Kelola produk yang dijual di toko.'}
           </p>
         </div>
@@ -228,9 +228,9 @@ export default function AdminProducts() {
 
       {!isLoading && !isError && items.length > 0 && (
         <>
-          <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
+          <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 overflow-x-auto">
             <table className="w-full text-sm text-left">
-              <thead className="bg-gray-50 text-gray-600">
+              <thead className="bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
                 <tr>
                   <th className="px-4 py-3 font-medium">Produk</th>
                   <th className="px-4 py-3 font-medium">Kategori</th>
@@ -241,23 +241,23 @@ export default function AdminProducts() {
                   <th className="px-4 py-3 font-medium text-right">Aksi</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                 {items.map((p) => (
                   <tr key={p.id}>
                     <td className="px-4 py-3">
-                      <span className="font-medium text-gray-900">{p.name}</span>
-                      <span className="block text-xs text-gray-500">{p.slug}</span>
+                      <span className="font-medium text-gray-900 dark:text-gray-100">{p.name}</span>
+                      <span className="block text-xs text-gray-500 dark:text-gray-400">{p.slug}</span>
                     </td>
-                    <td className="px-4 py-3 text-gray-600">{p.category_name}</td>
-                    <td className="px-4 py-3 text-gray-900 whitespace-nowrap">{priceLabel(p)}</td>
-                    <td className="px-4 py-3 text-gray-600">
+                    <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{p.category_name}</td>
+                    <td className="px-4 py-3 text-gray-900 dark:text-gray-100 whitespace-nowrap">{priceLabel(p)}</td>
+                    <td className="px-4 py-3 text-gray-600 dark:text-gray-300">
                       {p.total_stock === 0 ? (
                         <Badge variant="danger">Habis</Badge>
                       ) : (
                         p.total_stock
                       )}
                     </td>
-                    <td className="px-4 py-3 text-gray-600">{p.variant_count}</td>
+                    <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{p.variant_count}</td>
                     <td className="px-4 py-3">
                       <Badge variant={p.is_active ? 'success' : 'default'}>
                         {p.is_active ? 'Aktif' : 'Nonaktif'}

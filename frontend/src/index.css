@@ -7,12 +7,88 @@
 }
 
 html {
-  @apply scroll-smooth;
+  @apply scroll-smooth bg-white;
+}
+
+html.dark {
+  @apply bg-gray-950;
 }
 
 body {
   @apply bg-white text-gray-900 antialiased;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+}
+
+html.dark body {
+  @apply bg-gray-950 text-gray-100;
+}
+
+/* Pastikan komponen lama yang belum memiliki dark: tetap terbaca.
+   Jangan menimpa warna dark variant yang sudah didefinisikan komponen. */
+html.dark .bg-white:not([class*='dark:bg-']) {
+  background-color: #1e293b;
+}
+
+html.dark .bg-gray-50:not([class*='dark:bg-']) {
+  background-color: #243247;
+}
+
+html.dark .bg-gray-100:not([class*='dark:bg-']) {
+  background-color: #334155;
+}
+
+html.dark .bg-gray-200:not([class*='dark:bg-']) {
+  background-color: #475569;
+}
+
+html.dark .text-gray-900:not([class*='dark:text-']),
+html.dark .text-gray-800:not([class*='dark:text-']),
+html.dark .text-gray-700:not([class*='dark:text-']) {
+  color: #f3f4f6;
+}
+
+html.dark .text-gray-600:not([class*='dark:text-']),
+html.dark .text-gray-500:not([class*='dark:text-']) {
+  color: #cbd5e1;
+}
+
+html.dark .text-gray-400:not([class*='dark:text-']) {
+  color: #94a3b8;
+}
+
+html.dark .border-gray-100:not([class*='dark:border-']),
+html.dark .border-gray-200:not([class*='dark:border-']),
+html.dark .border-gray-300:not([class*='dark:border-']) {
+  border-color: #475569;
+}
+
+html.dark .divide-gray-100:not([class*='dark:divide-']) > :not([hidden]) ~ :not([hidden]),
+html.dark .divide-gray-200:not([class*='dark:divide-']) > :not([hidden]) ~ :not([hidden]) {
+  border-color: #475569;
+}
+
+html.dark [class~="hover:bg-gray-50"]:hover {
+  background-color: #1f2937;
+}
+
+html.dark [class~="hover:bg-gray-100"]:hover {
+  background-color: #374151;
+}
+
+html.dark [class~="hover:bg-white"]:hover {
+  background-color: #1f2937;
+}
+
+html.dark .bg-primary-50 {
+  background-color: rgb(7 89 133 / 0.35);
+}
+
+html.dark .border-primary-200 {
+  border-color: #075985;
+}
+
+html.dark .text-primary-900 {
+  color: #e0f2fe;
 }
 
 button {

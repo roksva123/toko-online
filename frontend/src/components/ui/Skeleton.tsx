@@ -12,7 +12,7 @@ export function Skeleton({ className, count = 1 }: SkeletonProps) {
         <div
           key={i}
           className={cn(
-            'bg-gray-200 rounded animate-pulse',
+            'bg-gray-200 dark:bg-gray-700 rounded animate-pulse',
             className
           )}
         />
@@ -23,7 +23,7 @@ export function Skeleton({ className, count = 1 }: SkeletonProps) {
 
 export function CardSkeleton() {
   return (
-    <div className="bg-white rounded-lg shadow-md overflow-hidden">
+    <div className="bg-white dark:bg-gray-900 rounded-lg shadow-md overflow-hidden">
       <Skeleton className="w-full h-48" />
       <div className="p-4 space-y-3">
         <Skeleton className="h-4 w-3/4" />

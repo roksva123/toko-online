@@ -5,6 +5,7 @@ import { Helmet } from 'react-helmet-async'
 import { Badge, Button, ErrorState, Skeleton } from '@/components/ui'
 import { useCart } from '@/contexts/CartContext'
 import { fetchPublicProduct, formatRupiah, isNotFound } from '@/lib/api/catalog'
+import { fetchProductReviews } from '@/lib/api/reviews'
 
 export default function ProductDetailPage() {
   const { slug = '' } = useParams()
@@ -28,16 +29,24 @@ export default function ProductDetailPage() {
   const [imageIndex, setImageIndex] = useState(0)
   const [notice, setNotice] = useState<{ type: 'success' | 'warning'; text: string } | null>(null)
   const { items: cartItems, addItem } = useCart()
+  const { data: reviews = [], isLoading: reviewsLoading } = useQuery({
+    queryKey: ['product-reviews', product?.id],
+    queryFn: () => fetchProductReviews(product?.id ?? ''),
+    enabled: Boolean(product?.id),
+  })
 
-  // Sinkronisasi seleksi atribut ke variantId
+  // Sinkronisasi pilihan atribut dengan varian yang cocok.
   useEffect(() => {
-    if (!product) return
-    const match = product.variants.find((v) =>
-      Object.entries(selectedOptions).every(([_, optId]) =>
-        v.attribute_option_ids.includes(optId)
-      )
+    if (!product || Object.keys(selectedOptions).length === 0) return
+    const selectedOptionIDs = Object.values(selectedOptions)
+    const match = product.variants.find(
+      (v) =>
+        selectedOptionIDs.every((optionID) => v.attribute_option_ids?.includes(optionID)) &&
+        v.attribute_option_ids?.length === selectedOptionIDs.length
     )
-    if (match) setVariantId(match.id)
+    if (match) selectVariant(match.id)
+  // selectVariant hanya memakai data produk yang sama; sengaja tidak dijadikan dependency.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedOptions, product])
 
   // Setiap membuka produk baru: pilih varian pertama yang stoknya ada
@@ -74,7 +83,7 @@ export default function ProductDetailPage() {
     setQuantity((q) => Math.min(q, Math.max(1, stock)))
   }
 
-  const handleAddToCart = () => {
+  const handleAddToCart = async () => {
     if (!product || !variant || variant.stock === 0) return
 
     // Jumlah di keranjang + jumlah baru tidak boleh melebihi stok
@@ -93,16 +102,20 @@ export default function ProductDetailPage() {
       return
     }
 
-    addItem({
-      product_id: product.id,
-      product_name: product.name,
-      variant_id: variant.id,
-      variant_name: variant.name,
-      price: variant.price,
-      quantity,
-      image_url: product.images.find((img) => img.url)?.url ?? '',
-    })
-    setNotice({ type: 'success', text: 'Ditambahkan ke keranjang.' })
+    try {
+      await addItem({
+        product_id: product.id,
+        product_name: product.name,
+        variant_id: variant.id,
+        variant_name: variant.name,
+        price: variant.price,
+        quantity,
+        image_url: product.images.find((img) => img.url)?.url ?? '',
+      })
+      setNotice({ type: 'success', text: 'Ditambahkan ke keranjang.' })
+    } catch (error) {
+      setNotice({ type: 'warning', text: 'Gagal menambahkan produk ke keranjang.' })
+    }
   }
 
   // ---------- Loading / error ----------
@@ -162,7 +175,7 @@ export default function ProductDetailPage() {
 
       <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Breadcrumb */}
-        <nav aria-label="Breadcrumb" className="text-sm text-gray-500 mb-6">
+        <nav aria-label="Breadcrumb" className="text-sm text-gray-500 dark:text-gray-400 mb-6">
           <Link to="/" className="hover:text-primary-600">
             Beranda
           </Link>
@@ -178,13 +191,13 @@ export default function ProductDetailPage() {
             {product.category_name}
           </Link>
           <span className="mx-2">›</span>
-          <span className="text-gray-900">{product.name}</span>
+          <span className="text-gray-900 dark:text-gray-100">{product.name}</span>
         </nav>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-12">
           {/* Galeri */}
           <div>
-            <div className="aspect-square w-full overflow-hidden rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center">
+            <div className="aspect-square w-full overflow-hidden rounded-lg bg-gray-100 border border-gray-200 dark:bg-gray-800 dark:border-gray-700 flex items-center justify-center">
               {currentImage ? (
                 <img
                   src={currentImage.url}
@@ -192,7 +205,7 @@ export default function ProductDetailPage() {
                   className="w-full h-full object-cover"
                 />
               ) : (
-                <span className="text-gray-400 text-sm">Belum ada foto</span>
+                <span className="text-gray-500 dark:text-gray-400 text-sm">Belum ada foto</span>
               )}
             </div>
 
@@ -218,7 +231,15 @@ export default function ProductDetailPage() {
           {/* Info */}
           <div>
             <p className="text-sm text-primary-600 font-medium mb-1">{product.category_name}</p>
-            <h1 className="text-2xl md:text-3xl font-bold text-gray-900">{product.name}</h1>
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-gray-100">{product.name}</h1>
+
+            <div className="mt-2 flex items-center gap-2 text-sm" aria-label={`Rating ${product.rating.toFixed(1)} dari 5`}>
+              <span className="text-amber-500 tracking-wide">{'★'.repeat(Math.round(product.rating))}{'☆'.repeat(5 - Math.round(product.rating))}</span>
+              <span className="text-gray-600 dark:text-gray-400">
+                {product.rating > 0 ? product.rating.toFixed(1) : 'Belum ada rating'}
+                {product.review_count > 0 && ` (${product.review_count} ulasan)`}
+              </span>
+            </div>
 
             <p className="text-3xl font-bold text-primary-600 mt-4">{priceLabel}</p>
 
@@ -229,7 +250,7 @@ export default function ProductDetailPage() {
                 <div className="space-y-4">
                   {product.attributes.map((attr) => (
                     <div key={attr.id}>
-                      <p className="text-sm font-medium text-gray-700 mb-2">{attr.name}</p>
+                      <p className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">{attr.name}</p>
                       <div className="flex flex-wrap gap-2">
                         {attr.options.map((opt) => {
                           const selected = selectedOptions[attr.id] === opt.id
@@ -242,8 +263,8 @@ export default function ProductDetailPage() {
                               }
                               className={`px-3 py-1.5 rounded border text-sm transition-all ${
                                 selected
-                                  ? 'border-primary-600 bg-primary-50 text-primary-900 shadow-sm'
-                                  : 'border-gray-200 text-gray-700 hover:border-gray-300 bg-white'
+                                  ? 'border-primary-600 bg-primary-50 text-primary-900 shadow-sm dark:bg-primary-900/40 dark:text-primary-100'
+                                  : 'border-gray-200 text-gray-700 hover:border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:border-gray-500'
                               }`}
                             >
                               {opt.value}
@@ -258,8 +279,8 @@ export default function ProductDetailPage() {
 
               {/* Pilihan Varian (Jika perlu pemilihan langsung) */}
               <div className="space-y-2">
-                <p className="text-sm font-medium text-gray-700">
-                  Varian Terpilih: <span className="font-normal text-gray-500">{variant?.name}</span>
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-200">
+                  Varian Terpilih: <span className="font-normal text-gray-500 dark:text-gray-400">{variant?.name}</span>
                 </p>
                 {(product.variants?.length ?? 0) > 1 && (
                   <div className="flex flex-wrap gap-2">
@@ -271,7 +292,7 @@ export default function ProductDetailPage() {
                         className={`px-3 py-1.5 rounded border text-sm transition-all ${
                           v.id === variantId
                             ? 'border-primary-600 bg-primary-50 text-primary-900 shadow-sm'
-                            : 'border-gray-200 text-gray-700 hover:border-gray-300 bg-white'
+                            : 'border-gray-200 text-gray-700 hover:border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:border-gray-500'
                         }`}
                       >
                         {v.name}
@@ -289,20 +310,20 @@ export default function ProductDetailPage() {
               ) : stock <= 5 ? (
                 <Badge variant="warning">Sisa {stock}</Badge>
               ) : (
-                <span className="text-gray-600">Stok tersedia: {stock}</span>
+                <span className="text-gray-600 dark:text-gray-400">Stok tersedia: {stock}</span>
               )}
             </div>
 
             {/* Jumlah */}
             <div className="mt-6">
-              <p className="text-sm font-medium text-gray-700 mb-2">Jumlah</p>
-              <div className="inline-flex items-center border border-gray-300 rounded">
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">Jumlah</p>
+              <div className="inline-flex items-center border border-gray-300 dark:border-gray-600 rounded">
                 <button
                   type="button"
                   aria-label="Kurangi jumlah"
                   onClick={() => setQuantity((q) => Math.max(1, q - 1))}
                   disabled={outOfStock || quantity <= 1}
-                  className="w-11 h-11 text-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="w-11 h-11 text-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   −
                 </button>
@@ -314,15 +335,15 @@ export default function ProductDetailPage() {
                   aria-label="Tambah jumlah"
                   onClick={() => setQuantity((q) => Math.min(stock, q + 1))}
                   disabled={outOfStock || quantity >= stock}
-                  className="w-11 h-11 text-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="w-11 h-11 text-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   +
                 </button>
               </div>
               {!outOfStock && variant && (
-                <p className="text-sm text-gray-600 mt-2">
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
                   Subtotal:{' '}
-                  <span className="font-semibold text-gray-900">
+                  <span className="font-semibold text-gray-900 dark:text-gray-100">
                     {formatRupiah(variant.price * quantity)}
                   </span>
                 </p>
@@ -334,8 +355,8 @@ export default function ProductDetailPage() {
                 role="status"
                 className={`mt-4 rounded border px-3 py-2.5 text-sm flex items-center justify-between gap-3 ${
                   notice.type === 'success'
-                    ? 'border-green-200 bg-green-50 text-green-800'
-                    : 'border-yellow-200 bg-yellow-50 text-yellow-800'
+                    ? 'border-green-200 bg-green-50 text-green-800 dark:border-green-800 dark:bg-green-950/40 dark:text-green-200'
+                    : 'border-yellow-200 bg-yellow-50 text-yellow-800 dark:border-yellow-800 dark:bg-yellow-950/40 dark:text-yellow-200'
                 }`}
               >
                 <span>{notice.text}</span>
@@ -354,7 +375,7 @@ export default function ProductDetailPage() {
             </div>
 
             {variant && (
-              <p className="text-xs text-gray-500 mt-4">
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-4">
                 SKU: {variant.sku}
                 {variant.weight_gram > 0 && ` · Berat: ${variant.weight_gram} gram`}
               </p>
@@ -364,13 +385,41 @@ export default function ProductDetailPage() {
 
         {/* Deskripsi */}
         <section className="mt-12 max-w-3xl">
-          <h2 className="text-xl font-semibold text-gray-900 mb-3">Deskripsi produk</h2>
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-3">Deskripsi produk</h2>
           {product.description ? (
-            <p className="text-gray-700 whitespace-pre-line leading-relaxed">
+            <p className="text-gray-700 dark:text-gray-300 whitespace-pre-line leading-relaxed">
               {product.description}
             </p>
           ) : (
-            <p className="text-gray-500">Belum ada deskripsi untuk produk ini.</p>
+            <p className="text-gray-500 dark:text-gray-400">Belum ada deskripsi untuk produk ini.</p>
+          )}
+        </section>
+
+        <section className="mt-10 max-w-3xl" aria-labelledby="reviews-heading">
+          <h2 id="reviews-heading" className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">
+            Penilaian pembeli
+          </h2>
+          {reviewsLoading ? (
+            <Skeleton className="h-24" />
+          ) : reviews.length === 0 ? (
+            <p className="text-gray-500 dark:text-gray-400">Belum ada penilaian untuk produk ini.</p>
+          ) : (
+            <div className="space-y-4">
+              {reviews.map((review) => (
+                <article key={review.id} className="border-b border-gray-200 dark:border-gray-700 pb-4 last:border-0">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-medium text-gray-900 dark:text-gray-100">{review.user_name}</p>
+                    <span className="text-amber-500" aria-label={`Rating ${review.rating} dari 5`}>
+                      {'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)}
+                    </span>
+                  </div>
+                  {review.comment && <p className="mt-1 text-gray-700 dark:text-gray-300 whitespace-pre-line">{review.comment}</p>}
+                  <time className="mt-1 block text-xs text-gray-500 dark:text-gray-400" dateTime={review.created_at}>
+                    {new Date(review.created_at).toLocaleDateString('id-ID')}
+                  </time>
+                </article>
+              ))}
+            </div>
           )}
         </section>
       </div>

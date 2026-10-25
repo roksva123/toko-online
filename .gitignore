@@ -24,6 +24,13 @@ dist/
 /build/
 /vendor/
 
+# TypeScript compiler output accidentally emitted into source
+frontend/src/**/*.js
+frontend/src/**/*.js.map
+frontend/src/**/*.d.ts
+frontend/src/**/*.d.ts.map
+!frontend/src/vite-env.d.ts
+
 # Logs
 *.log
 logs/

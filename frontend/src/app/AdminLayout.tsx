@@ -2,7 +2,7 @@ import { Outlet } from 'react-router-dom'
 
 export function AdminLayout() {
   return (
-    <div className="flex min-h-screen bg-gray-100">
+    <div className="flex min-h-screen bg-gray-100 dark:bg-gray-950">
       {/* Sidebar */}
       <aside className="w-64 bg-gray-900 text-white p-4 hidden md:block">
         <h2 className="font-bold text-lg mb-6">Admin Panel</h2>
@@ -34,9 +34,9 @@ export function AdminLayout() {
 
       {/* Main Content */}
       <main className="flex-1">
-        <header className="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
-          <a href="/" className="text-gray-600 hover:text-gray-900 text-sm">
+        <header className="bg-white border-b border-gray-200 dark:bg-gray-900 dark:border-gray-700 px-6 py-4 flex justify-between items-center">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Admin Dashboard</h1>
+          <a href="/" className="text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white text-sm">
             Keluar
           </a>
         </header>

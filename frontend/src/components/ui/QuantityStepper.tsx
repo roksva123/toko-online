@@ -1,7 +1,7 @@
-import { ButtonHTMLAttributes } from 'react'
+import { HTMLAttributes } from 'react'
 import { cn } from '@/lib/utils'
 
-interface QuantityStepperProps extends ButtonHTMLAttributes<HTMLDivElement> {
+interface QuantityStepperProps extends Omit<HTMLAttributes<HTMLDivElement>, 'onChange'> {
   value: number
   onChange: (value: number) => void
   min?: number
@@ -40,7 +40,7 @@ export function QuantityStepper({
   return (
     <div
       className={cn(
-        'flex items-center border border-gray-300 rounded w-fit',
+        'flex items-center border border-gray-300 dark:border-gray-600 rounded w-fit',
         disabled && 'opacity-50 cursor-not-allowed',
         className
       )}
@@ -49,7 +49,7 @@ export function QuantityStepper({
       <button
         onClick={handleDecrement}
         disabled={value <= min || disabled}
-        className="px-3 py-2 hover:bg-gray-50 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+        className="px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:hover:bg-transparent disabled:cursor-not-allowed"
         aria-label="Kurangi jumlah"
       >
         −
@@ -66,7 +66,7 @@ export function QuantityStepper({
       <button
         onClick={handleIncrement}
         disabled={value >= max || disabled}
-        className="px-3 py-2 hover:bg-gray-50 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+        className="px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:hover:bg-transparent disabled:cursor-not-allowed"
         aria-label="Tambah jumlah"
       >
         +

@@ -9,7 +9,7 @@ export function Spinner({ fullscreen = false }: { fullscreen?: boolean }) {
 
   if (fullscreen) {
     return (
-      <div className="fixed inset-0 flex items-center justify-center bg-white/80 backdrop-blur-sm">
+      <div className="fixed inset-0 flex items-center justify-center bg-white/80 dark:bg-gray-950/80 backdrop-blur-sm">
         {content}
       </div>
     )

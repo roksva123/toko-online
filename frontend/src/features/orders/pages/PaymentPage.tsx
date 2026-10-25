@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react'
 import { Helmet } from 'react-helmet-async'
 import { useParams } from 'react-router-dom'
-import { useQuery, useMutation } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/lib/api/client'
 import { Button, Card, CardBody, Badge, Input, Skeleton, ErrorState } from '@/components/ui'
-import { formatRupiah, formatDate } from '@/lib/utils'
+import { formatRupiah } from '@/lib/utils'
 
 interface OrderPayment {
   id: string
-  status: 'waiting_confirmation' | 'confirmed' | 'rejected'
+  status: 'pending' | 'waiting_confirmation' | 'paid' | 'rejected' | 'expired'
+  amount_due: number
   proof_image_url?: string
   sender_name?: string
   rejection_reason?: string
@@ -25,14 +26,15 @@ interface Order {
 
 export default function PaymentPage() {
   const { id } = useParams<{ id: string }>()
+  const queryClient = useQueryClient()
   const [senderName, setSenderName] = useState('')
   const [proofFile, setProofFile] = useState<File | null>(null)
-  const [timeLeft, setTimeLeft] = useState(0)
+  const [timeLeft, setTimeLeft] = useState<number | null>(null)
 
   const { data: order, isLoading, error } = useQuery({
     queryKey: ['order', id],
     queryFn: async () => {
-      const response = await apiClient.get<{ data: Order }>(`/orders/${id}`)
+      const response = await apiClient.get<Order>(`/orders/${id}`)
       return response.data
     },
   })
@@ -49,6 +51,7 @@ export default function PaymentPage() {
     onSuccess: () => {
       setSenderName('')
       setProofFile(null)
+      void queryClient.invalidateQueries({ queryKey: ['order', id] })
     },
   })
 
@@ -71,7 +74,8 @@ export default function PaymentPage() {
     return () => clearInterval(timer)
   }, [order?.payment?.expires_at])
 
-  const formatTime = (ms: number) => {
+  const formatTime = (ms: number | null) => {
+    if (ms === null) return 'Menghitung waktu...'
     const hours = Math.floor(ms / (1000 * 60 * 60))
     const minutes = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60))
     const seconds = Math.floor((ms % (1000 * 60)) / 1000)
@@ -96,9 +100,11 @@ export default function PaymentPage() {
 
   if (!order) return null
 
-  const isExpired = timeLeft === 0
-  const isConfirmed = order.payment?.status === 'confirmed'
-  const isRejected = order.payment?.status === 'rejected'
+  const paymentStatus = order.payment?.status ?? 'pending'
+  const isExpired = paymentStatus === 'expired' || (paymentStatus === 'pending' && timeLeft === 0)
+  const isPaid = paymentStatus === 'paid'
+  const isWaitingConfirmation = paymentStatus === 'waiting_confirmation'
+  const isRejected = paymentStatus === 'rejected'
 
   return (
     <>
@@ -117,10 +123,12 @@ export default function PaymentPage() {
                 <p className="text-sm text-gray-600">Nomor Pesanan</p>
                 <p className="font-bold text-lg">{order.order_number}</p>
               </div>
-              <Badge variant={isConfirmed ? 'success' : isExpired ? 'danger' : 'warning'}>
-                {isConfirmed && 'Terbayar'}
+              <Badge variant={isPaid ? 'success' : isExpired ? 'danger' : 'warning'}>
+                {isPaid && 'Terbayar'}
                 {isExpired && 'Kadaluarsa'}
-                {!isConfirmed && !isExpired && 'Menunggu Pembayaran'}
+                {isWaitingConfirmation && 'Menunggu Konfirmasi'}
+                {isRejected && 'Bukti Ditolak'}
+                {!isPaid && !isExpired && !isWaitingConfirmation && !isRejected && 'Menunggu Pembayaran'}
               </Badge>
             </div>
           </CardBody>
@@ -136,10 +144,21 @@ export default function PaymentPage() {
           </Card>
         )}
 
-        {isConfirmed && (
+        {isPaid && (
           <Card className="mb-6 border-l-4 border-l-green-500">
             <CardBody>
               <p className="text-green-700 font-medium">✓ Pembayaran telah dikonfirmasi</p>
+            </CardBody>
+          </Card>
+        )}
+
+        {isWaitingConfirmation && (
+          <Card className="mb-6 border-l-4 border-l-blue-500">
+            <CardBody>
+              <p className="text-blue-700 font-medium">✓ Bukti pembayaran sudah diunggah dan sedang diperiksa admin.</p>
+              {order.payment.sender_name && (
+                <p className="text-sm text-blue-600 mt-2">Nama pengirim: {order.payment.sender_name}</p>
+              )}
             </CardBody>
           </Card>
         )}
@@ -155,7 +174,7 @@ export default function PaymentPage() {
           </Card>
         )}
 
-        {!isConfirmed && !isExpired && (
+        {!isPaid && !isWaitingConfirmation && !isExpired && (
           <>
             {/* Countdown */}
             <Card className="mb-6 bg-blue-50 border-blue-200">
@@ -169,7 +188,7 @@ export default function PaymentPage() {
             <Card className="mb-6">
               <CardBody>
                 <p className="text-sm text-gray-600 mb-2">Nominal yang harus ditransfer</p>
-                <p className="text-4xl font-bold text-primary-600 mb-1">{formatRupiah(order.total)}</p>
+                <p className="text-4xl font-bold text-primary-600 mb-1">{formatRupiah(order.payment.amount_due)}</p>
                 <div className="bg-yellow-50 border border-yellow-200 rounded p-3 mt-3">
                   <p className="text-sm text-yellow-800">
                     ⚠️ Transfer <strong>TEPAT</strong> sesuai nominal di atas, termasuk kode unik di akhir
@@ -253,6 +272,14 @@ export default function PaymentPage() {
                 >
                   Upload Bukti Pembayaran
                 </Button>
+
+                {uploadProofMutation.isError && (
+                  <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded">
+                    <p className="text-sm text-red-700">
+                      {apiClient.handleError(uploadProofMutation.error).message}
+                    </p>
+                  </div>
+                )}
 
                 {uploadProofMutation.isSuccess && (
                   <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded">

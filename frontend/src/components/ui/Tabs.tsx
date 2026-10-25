@@ -25,7 +25,7 @@ export function Tabs({ tabs, defaultTab, onChange }: TabsProps) {
 
   return (
     <div>
-      <div className="border-b border-gray-200 flex gap-0 overflow-x-auto">
+      <div className="border-b border-gray-200 dark:border-gray-700 flex gap-0 overflow-x-auto">
         {tabs.map((tab) => (
           <button
             key={tab.id}
@@ -34,7 +34,7 @@ export function Tabs({ tabs, defaultTab, onChange }: TabsProps) {
               'px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap',
               activeTab === tab.id
                 ? 'border-primary-600 text-primary-600'
-                : 'border-transparent text-gray-600 hover:text-gray-900'
+                : 'border-transparent text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100'
             )}
           >
             {tab.label}

@@ -67,13 +67,13 @@ export default function HomePage() {
         {/* Kategori */}
         {topCategories.length > 0 && (
           <section className="py-12">
-            <h2 className="text-2xl font-bold mb-6">Kategori</h2>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Kategori</h2>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {topCategories.map((cat) => (
                 <Link key={cat.id} to={`/products?category=${encodeURIComponent(cat.slug)}`}>
-                  <Card className="hover:shadow-lg transition-shadow cursor-pointer h-24 flex items-center justify-center">
+                  <Card className="border border-slate-700 bg-slate-800 hover:border-primary-400 hover:bg-slate-700 hover:shadow-lg transition-shadow cursor-pointer h-24 flex items-center justify-center dark:border-slate-700 dark:bg-slate-800 dark:hover:border-primary-400 dark:hover:bg-slate-700">
                     <CardBody className="text-center">
-                      <p className="font-medium text-gray-900">{cat.name}</p>
+                      <p className="font-medium text-gray-900 dark:text-gray-100">{cat.name}</p>
                     </CardBody>
                   </Card>
                 </Link>
@@ -85,8 +85,8 @@ export default function HomePage() {
         {/* Produk terbaru */}
         <section className="py-12">
           <div className="flex items-end justify-between mb-6">
-            <h2 className="text-2xl font-bold">Produk Terbaru</h2>
-            <Link to="/products" className="text-sm text-primary-600 hover:underline">
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Produk Terbaru</h2>
+            <Link to="/products" className="text-sm text-primary-400 hover:text-primary-300 hover:underline dark:text-primary-400 dark:hover:text-primary-300">
               Lihat semua
             </Link>
           </div>
@@ -120,9 +120,9 @@ export default function HomePage() {
         {/* Ajakan daftar (disembunyikan jika sudah login) */}
         {!isAuthenticated && (
           <section className="py-12 mb-12">
-            <div className="bg-primary-50 border border-primary-200 rounded-lg px-6 md:px-12 py-8 text-center">
-              <h2 className="text-2xl font-bold text-gray-900 mb-3">Belanja lebih mudah dengan akun</h2>
-              <p className="text-gray-600 mb-6">
+            <div className="bg-primary-50 border border-primary-200 rounded-lg px-6 md:px-12 py-8 text-center dark:bg-primary-950/40 dark:border-primary-800">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-3">Belanja lebih mudah dengan akun</h2>
+              <p className="text-gray-600 dark:text-gray-400 mb-6">
                 Daftar sekarang untuk menyimpan alamat, memantau pesanan, dan checkout lebih cepat.
               </p>
               <Link to="/register">

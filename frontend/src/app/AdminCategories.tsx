@@ -192,8 +192,8 @@ export default function AdminCategories() {
 
       <div className="flex items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Kategori</h1>
-          <p className="text-gray-600 text-sm mt-1">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Kategori</h1>
+          <p className="text-gray-600 dark:text-gray-400 text-sm mt-1">
             Kelompokkan produk agar mudah dicari pembeli.
           </p>
         </div>
@@ -232,9 +232,9 @@ export default function AdminCategories() {
       )}
 
       {!isLoading && !isError && rows.length > 0 && (
-        <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
+        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 overflow-x-auto">
           <table className="w-full text-sm text-left">
-            <thead className="bg-gray-50 text-gray-600">
+            <thead className="bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
               <tr>
                 <th className="px-4 py-3 font-medium">Nama</th>
                 <th className="px-4 py-3 font-medium">Slug</th>
@@ -244,25 +244,25 @@ export default function AdminCategories() {
                 <th className="px-4 py-3 font-medium text-right">Aksi</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
               {rows.map(({ category, depth }) => (
                 <tr key={category.id}>
                   <td className="px-4 py-3">
                     <div style={{ paddingLeft: depth * 20 }}>
-                      <span className="font-medium text-gray-900">
+                      <span className="font-medium text-gray-900 dark:text-gray-100">
                         {depth > 0 && <span className="text-gray-400 mr-1">└</span>}
                         {category.name}
                       </span>
                       {category.parent_id && (
-                        <span className="block text-xs text-gray-500">
+                        <span className="block text-xs text-gray-500 dark:text-gray-400">
                           di dalam {parentName(category.parent_id)}
                         </span>
                       )}
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-gray-600">{category.slug}</td>
-                  <td className="px-4 py-3 text-gray-600">{category.sort_order}</td>
-                  <td className="px-4 py-3 text-gray-600">{category.product_count}</td>
+                  <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{category.slug}</td>
+                  <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{category.sort_order}</td>
+                  <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{category.product_count}</td>
                   <td className="px-4 py-3">
                     <Badge variant={category.is_active ? 'success' : 'default'}>
                       {category.is_active ? 'Aktif' : 'Nonaktif'}
@@ -361,7 +361,7 @@ export default function AdminCategories() {
             disabled={saving}
           />
 
-          <label className="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+          <label className="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200 cursor-pointer">
             <Checkbox
               checked={form.is_active}
               onChange={(e) => setField('is_active', e.target.checked)}

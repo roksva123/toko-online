@@ -14,8 +14,8 @@ export function Card({
     <div
       className={cn(
         'rounded-lg overflow-hidden',
-        variant === 'default' && 'bg-white shadow-md',
-        variant === 'bordered' && 'border border-gray-200 bg-white',
+        variant === 'default' && 'bg-white shadow-md dark:bg-slate-800 dark:text-gray-100',
+        variant === 'bordered' && 'border border-gray-200 bg-white dark:border-slate-700 dark:bg-slate-800 dark:text-gray-100',
         className
       )}
       {...props}
@@ -24,7 +24,7 @@ export function Card({
 }
 
 export function CardHeader({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn('px-6 py-4 border-b border-gray-100', className)} {...props} />
+  return <div className={cn('px-6 py-4 border-b border-gray-100 dark:border-gray-700', className)} {...props} />
 }
 
 export function CardBody({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
@@ -34,7 +34,7 @@ export function CardBody({ className, ...props }: HTMLAttributes<HTMLDivElement>
 export function CardFooter({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn('px-6 py-4 border-t border-gray-100 bg-gray-50', className)}
+      className={cn('px-6 py-4 border-t border-gray-100 bg-gray-50 dark:border-slate-700 dark:bg-slate-700', className)}
       {...props}
     />
   )

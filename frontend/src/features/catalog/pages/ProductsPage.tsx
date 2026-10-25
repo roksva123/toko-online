@@ -22,7 +22,7 @@ const sortMap = {
 type SortKey = keyof typeof sortMap
 
 const selectClass =
-  'w-full px-3 py-2.5 border border-gray-300 rounded text-base bg-white transition-colors focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-primary-500'
+  'w-full px-3 py-2.5 border border-gray-300 rounded text-base bg-white text-gray-900 transition-colors focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100'
 
 export default function ProductsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -123,7 +123,7 @@ export default function ProductsPage() {
       />
 
       <div>
-        <label htmlFor="filter-category" className="block text-sm font-medium text-gray-700 mb-2">
+        <label htmlFor="filter-category" className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
           Kategori
         </label>
         <select
@@ -143,7 +143,7 @@ export default function ProductsPage() {
       </div>
 
       <div>
-        <label htmlFor="filter-sort" className="block text-sm font-medium text-gray-700 mb-2">
+        <label htmlFor="filter-sort" className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
           Urutkan
         </label>
         <select
@@ -182,7 +182,7 @@ export default function ProductsPage() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           {/* Filter desktop */}
           <aside className="hidden md:block">
-            <div className="bg-white rounded-lg shadow-md p-4">
+            <div className="bg-white rounded-lg shadow-md p-4 dark:bg-gray-900">
               <h2 className="font-semibold mb-4">Filter</h2>
               {filterFields}
             </div>

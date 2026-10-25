@@ -1,7 +1,7 @@
 import { Helmet } from 'react-helmet-async'
 import { Link } from 'react-router-dom'
 import { useCart } from '@/contexts/CartContext'
-import { Button, Card, CardBody, QuantityStepper, EmptyState, Badge } from '@/components/ui'
+import { Button, Card, CardBody, QuantityStepper, EmptyState } from '@/components/ui'
 import { formatRupiah } from '@/lib/utils'
 
 export default function CartPage() {
@@ -39,14 +39,14 @@ export default function CartPage() {
                   <CardBody>
                     <div className="flex gap-4">
                       {/* Image */}
-                      <div className="w-24 h-24 bg-gray-200 rounded-lg flex-shrink-0 flex items-center justify-center">
+                      <div className="w-24 h-24 bg-gray-200 dark:bg-gray-700 rounded-lg flex-shrink-0 flex items-center justify-center">
                         <span className="text-gray-400 text-4xl">📦</span>
                       </div>
 
                       {/* Details */}
                       <div className="flex-1">
-                        <h3 className="font-semibold text-gray-900">{item.product_name}</h3>
-                        <p className="text-sm text-gray-600">{item.variant_name}</p>
+                        <h3 className="font-semibold text-gray-900 dark:text-gray-100">{item.product_name}</h3>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">{item.variant_name}</p>
                         <p className="text-primary-600 font-bold mt-2">
                           {formatRupiah(item.price)} x {item.quantity} ={' '}
                           <span>{formatRupiah(item.price * item.quantity)}</span>
@@ -82,7 +82,7 @@ export default function CartPage() {
                 <CardBody>
                   <h3 className="font-semibold text-lg mb-4">Ringkasan Pesanan</h3>
 
-                  <div className="space-y-2 mb-4 pb-4 border-b border-gray-200">
+                  <div className="space-y-2 mb-4 pb-4 border-b border-gray-200 dark:border-gray-700">
                     <div className="flex justify-between text-gray-600">
                       <span>Subtotal ({items.length} produk)</span>
                       <span>{formatRupiah(subtotal)}</span>

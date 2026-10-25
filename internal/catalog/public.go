@@ -31,6 +31,8 @@ type PublicProduct struct {
 	PriceMin     int64     `json:"price_min"`
 	PriceMax     int64     `json:"price_max"`
 	TotalStock   int64     `json:"total_stock"`
+	Rating       float64   `json:"rating"`
+	ReviewCount  int64     `json:"review_count"`
 	ImageURL     string    `json:"image_url"`
 	CreatedAt    time.Time `json:"created_at"`
 
@@ -38,12 +40,24 @@ type PublicProduct struct {
 }
 
 type PublicVariant struct {
-	ID         string `json:"id"`
-	SKU        string `json:"sku"`
-	Name       string `json:"name"`
-	Price      int64  `json:"price"`
-	Stock      int    `json:"stock"`
-	WeightGram int    `json:"weight_gram"`
+	ID                 string   `json:"id"`
+	SKU                string   `json:"sku"`
+	Name               string   `json:"name"`
+	Price              int64    `json:"price"`
+	Stock              int      `json:"stock"`
+	WeightGram         int      `json:"weight_gram"`
+	AttributeOptionIDs []string `json:"attribute_option_ids"`
+}
+
+type PublicAttributeOption struct {
+	ID    string `json:"id"`
+	Value string `json:"value"`
+}
+
+type PublicAttribute struct {
+	ID      string                  `json:"id"`
+	Name    string                  `json:"name"`
+	Options []PublicAttributeOption `json:"options"`
 }
 
 type PublicImage struct {
@@ -54,15 +68,18 @@ type PublicImage struct {
 }
 
 type PublicProductDetail struct {
-	ID           string          `json:"id"`
-	Slug         string          `json:"slug"`
-	Name         string          `json:"name"`
-	Description  string          `json:"description"`
-	CategoryName string          `json:"category_name"`
-	CategorySlug string          `json:"category_slug"`
-	CreatedAt    time.Time       `json:"created_at"`
-	Images       []PublicImage   `json:"images"`
-	Variants     []PublicVariant `json:"variants"`
+	ID           string            `json:"id"`
+	Slug         string            `json:"slug"`
+	Name         string            `json:"name"`
+	Description  string            `json:"description"`
+	CategoryName string            `json:"category_name"`
+	CategorySlug string            `json:"category_slug"`
+	CreatedAt    time.Time         `json:"created_at"`
+	Rating       float64           `json:"rating"`
+	ReviewCount  int64             `json:"review_count"`
+	Images       []PublicImage     `json:"images"`
+	Variants     []PublicVariant   `json:"variants"`
+	Attributes   []PublicAttribute `json:"attributes"`
 }
 
 type publicFilter struct {
@@ -116,6 +133,8 @@ func (s *Store) ListPublicProducts(ctx context.Context, f publicFilter) ([]Publi
 	query := `
 		SELECT p.id::text, p.slug, p.name, c.name, c.slug,
 		       MIN(v.price), MAX(v.price), COALESCE(SUM(v.stock), 0),
+		       COALESCE((SELECT AVG(pr.rating) FROM product_reviews pr WHERE pr.product_id = p.id), 0),
+		       COALESCE((SELECT COUNT(*) FROM product_reviews pr WHERE pr.product_id = p.id), 0),
 		       COALESCE((SELECT i.storage_key FROM product_images i
 		                 WHERE i.product_id = p.id
 		                 ORDER BY i.sort_order, i.created_at LIMIT 1), ''),
@@ -133,7 +152,7 @@ func (s *Store) ListPublicProducts(ctx context.Context, f publicFilter) ([]Publi
 	for rows.Next() {
 		var p PublicProduct
 		if err := rows.Scan(&p.ID, &p.Slug, &p.Name, &p.CategoryName, &p.CategorySlug,
-			&p.PriceMin, &p.PriceMax, &p.TotalStock, &p.imageKey, &p.CreatedAt); err != nil {
+			&p.PriceMin, &p.PriceMax, &p.TotalStock, &p.Rating, &p.ReviewCount, &p.imageKey, &p.CreatedAt); err != nil {
 			return nil, 0, err
 		}
 		items = append(items, p)
@@ -145,11 +164,13 @@ func (s *Store) GetPublicProduct(ctx context.Context, slug string) (*PublicProdu
 	var p PublicProductDetail
 	err := s.pool.QueryRow(ctx, `
 		SELECT p.id::text, p.slug, p.name, COALESCE(p.description, ''),
-		       c.name, c.slug, p.created_at
+		       c.name, c.slug, p.created_at,
+		       COALESCE((SELECT AVG(pr.rating) FROM product_reviews pr WHERE pr.product_id = p.id), 0),
+		       COALESCE((SELECT COUNT(*) FROM product_reviews pr WHERE pr.product_id = p.id), 0)
 		FROM products p
 		JOIN categories c ON c.id = p.category_id AND c.is_active = TRUE
 		WHERE p.slug = $1 AND p.is_active = TRUE`, slug,
-	).Scan(&p.ID, &p.Slug, &p.Name, &p.Description, &p.CategoryName, &p.CategorySlug, &p.CreatedAt)
+	).Scan(&p.ID, &p.Slug, &p.Name, &p.Description, &p.CategoryName, &p.CategorySlug, &p.CreatedAt, &p.Rating, &p.ReviewCount)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -182,6 +203,65 @@ func (s *Store) GetPublicProduct(ctx context.Context, slug string) (*PublicProdu
 		return nil, ErrNotFound // produk tanpa varian aktif tidak bisa dibeli
 	}
 
+	attributeRows, err := s.pool.Query(ctx, `
+		SELECT a.id::text, a.name, ao.id::text, ao.value
+		FROM attributes a
+		JOIN attribute_options ao ON ao.attribute_id = a.id
+		WHERE a.product_id = $1::uuid
+		ORDER BY a.created_at, ao.created_at, ao.value`, p.ID)
+	if err != nil {
+		return nil, err
+	}
+	defer attributeRows.Close()
+
+	attributeMap := make(map[string]*PublicAttribute)
+	attributeIDs := make([]string, 0)
+	for attributeRows.Next() {
+		var attributeID, attributeName, optionID, optionValue string
+		if err := attributeRows.Scan(&attributeID, &attributeName, &optionID, &optionValue); err != nil {
+			return nil, err
+		}
+		if _, exists := attributeMap[attributeID]; !exists {
+			attributeMap[attributeID] = &PublicAttribute{
+				ID: attributeID, Name: attributeName, Options: make([]PublicAttributeOption, 0),
+			}
+			attributeIDs = append(attributeIDs, attributeID)
+		}
+		attributeMap[attributeID].Options = append(attributeMap[attributeID].Options,
+			PublicAttributeOption{ID: optionID, Value: optionValue})
+	}
+	if err := attributeRows.Err(); err != nil {
+		return nil, err
+	}
+	p.Attributes = make([]PublicAttribute, 0, len(attributeIDs))
+	for _, attributeID := range attributeIDs {
+		p.Attributes = append(p.Attributes, *attributeMap[attributeID])
+	}
+
+	for i := range p.Variants {
+		optionRows, err := s.pool.Query(ctx, `
+			SELECT attribute_option_id::text
+			FROM variant_attribute_values
+			WHERE variant_id = $1::uuid`, p.Variants[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		p.Variants[i].AttributeOptionIDs = make([]string, 0)
+		for optionRows.Next() {
+			var optionID string
+			if err := optionRows.Scan(&optionID); err != nil {
+				optionRows.Close()
+				return nil, err
+			}
+			p.Variants[i].AttributeOptionIDs = append(p.Variants[i].AttributeOptionIDs, optionID)
+		}
+		if err := optionRows.Err(); err != nil {
+			optionRows.Close()
+			return nil, err
+		}
+		optionRows.Close()
+	}
+
 	irows, err := s.pool.Query(ctx, `
 		SELECT id::text, storage_key
 		FROM product_images
@@ -206,8 +286,9 @@ func (s *Store) GetPublicProduct(ctx context.Context, slug string) (*PublicProdu
 // ---------- Handler ----------
 
 type PublicHandler struct {
-	store     *Store
-	imageBase string // mis. http://localhost:9000/toko-online
+	store *Store
+	// imageBase adalah URL publik server API yang menyajikan folder uploads.
+	imageBase string
 }
 
 func NewPublicHandler(pool *pgxpool.Pool, imageBase string) *PublicHandler {
@@ -225,7 +306,7 @@ func (h *PublicHandler) imageURL(key string) string {
 	if key == "" || h.imageBase == "" {
 		return ""
 	}
-	return h.imageBase + "/" + key
+	return h.imageBase + "/uploads/" + strings.TrimLeft(key, "/")
 }
 
 func (h *PublicHandler) ListProducts(w http.ResponseWriter, r *http.Request) {

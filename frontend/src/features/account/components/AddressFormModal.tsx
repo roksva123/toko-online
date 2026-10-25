@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Modal, Button, Input, Checkbox } from '@/components/ui'
+import { Modal, Button, Input, Checkbox, Textarea } from '@/components/ui'
 import {
   AddressInput,
   addressKeys,
@@ -181,7 +181,7 @@ export function AddressFormModal({
           helperText="Contoh: 081234567890"
         />
 
-        <Input
+        <Textarea
           label="Alamat Lengkap"
           value={addressLine}
           onChange={(e) => {
@@ -190,7 +190,6 @@ export function AddressFormModal({
           }}
           error={errors.address}
           disabled={isLoading}
-          textarea
           rows={3}
         />
 

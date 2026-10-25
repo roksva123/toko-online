@@ -53,6 +53,9 @@ func (h *Handler) MountAdmin(r chi.Router, requireAuth func(http.Handler) http.H
 		r.Get("/products/{id}", h.GetProduct)
 		r.Put("/products/{id}", h.UpdateProduct)
 		r.Delete("/products/{id}", h.DeleteProduct)
+		r.Get("/products/{id}/images", h.ListProductImages)
+		r.Post("/products/{id}/images", h.UploadProductImage)
+		r.Delete("/products/{id}/images/{imageID}", h.DeleteProductImage)
 	})
 }
 

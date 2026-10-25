@@ -12,9 +12,10 @@ import (
 
 type Config struct {
 	// App
-	Env      string
-	HTTPPort string
-	HTTPAddr string
+	Env          string
+	HTTPPort     string
+	HTTPAddr     string
+	PublicAPIURL string
 
 	// Database
 	DatabaseURL      string
@@ -74,13 +75,17 @@ func Load() *Config {
 		Env:                      getEnv("APP_ENV", "development"),
 		HTTPPort:                 getEnv("HTTP_PORT", "8080"),
 		HTTPAddr:                 getEnv("HTTP_ADDR", "0.0.0.0"),
+		PublicAPIURL:             getEnv("PUBLIC_API_URL", "http://localhost:8080"),
 		DatabaseURL:              getEnv("DATABASE_URL", ""),
 		DatabaseMaxConns:         getEnvInt("DATABASE_MAX_CONNS", 25),
 		DatabaseMinConns:         getEnvInt("DATABASE_MIN_CONNS", 5),
 		JWTSecret:                getEnv("JWT_SECRET", ""),
 		AccessTokenTTL:           getEnvDuration("ACCESS_TOKEN_TTL", 15*time.Minute),
 		RefreshTokenTTL:          getEnvDuration("REFRESH_TOKEN_TTL", 7*24*time.Hour),
-		CORSOrigins:              getEnvList("CORS_ORIGINS", []string{"http://localhost:3000", "http://localhost:5173"}),
+		CORSOrigins:              getEnvList("CORS_ORIGINS", []string{
+				"http://localhost:3000", "http://localhost:5173", "http://localhost:5174",
+				"http://127.0.0.1:3000", "http://127.0.0.1:5173", "http://127.0.0.1:5174",
+			}),
 		S3Endpoint:               getEnv("S3_ENDPOINT", "http://localhost:9000"),
 		S3Bucket:                 getEnv("S3_BUCKET", "toko-online"),
 		S3AccessKey:              getEnv("S3_ACCESS_KEY", "minioadmin"),

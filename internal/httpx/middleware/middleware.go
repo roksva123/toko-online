@@ -69,8 +69,12 @@ func SecurityHeaders(next http.Handler) http.Handler {
 func StripTrailingSlash(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" && strings.HasSuffix(r.URL.Path, "/") {
-			http.Redirect(w, r, strings.TrimSuffix(r.URL.Path, "/"), http.StatusMovedPermanently)
-			return
+			if r.Method == http.MethodOptions {
+				r.URL.Path = strings.TrimSuffix(r.URL.Path, "/")
+			} else {
+				http.Redirect(w, r, strings.TrimSuffix(r.URL.Path, "/"), http.StatusMovedPermanently)
+				return
+			}
 		}
 		next.ServeHTTP(w, r)
 	})

@@ -5,11 +5,15 @@ import {
   adminKeys,
   categoryOptions,
   createProduct,
+  deleteProductImage,
   fetchCategories,
   fetchProduct,
+  fetchProductImages,
   parseApiError,
+  productImageURL,
   ProductInput,
   updateProduct,
+  uploadProductImage,
 } from '@/lib/api/admin'
 
 interface VariantRow {
@@ -77,6 +81,13 @@ export function ProductForm({ productId, onCancel, onSaved }: ProductFormProps) 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [uploadingImage, setUploadingImage] = useState(false)
+  const [imageError, setImageError] = useState('')
+  const { data: images = [], refetch: refetchImages } = useQuery({
+    queryKey: [...adminKeys.products, 'images', productId],
+    queryFn: () => fetchProductImages(productId as string),
+    enabled: isEdit,
+  })
 
   // Isi form dari data server sekali saja, supaya refetch tidak menimpa ketikan admin
   const initialized = useRef(false)
@@ -156,6 +167,39 @@ export function ProductForm({ productId, onCancel, onSaved }: ProductFormProps) 
     })
 
     return errors
+  }
+
+  const handleImageUpload = async (file: File | undefined) => {
+    if (!file || !isEdit) return
+    setImageError('')
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setImageError('Gunakan foto JPG, PNG, atau WebP.')
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setImageError('Ukuran foto maksimal 5 MB.')
+      return
+    }
+
+    setUploadingImage(true)
+    try {
+      await uploadProductImage(productId as string, file)
+      await refetchImages()
+    } catch (err) {
+      setImageError(parseApiError(err).message)
+    } finally {
+      setUploadingImage(false)
+    }
+  }
+
+  const handleImageDelete = async (imageId: string) => {
+    setImageError('')
+    try {
+      await deleteProductImage(productId as string, imageId)
+      await refetchImages()
+    } catch (err) {
+      setImageError(parseApiError(err).message)
+    }
   }
 
   const handleSubmit = async (e: FormEvent) => {
@@ -316,6 +360,62 @@ export function ProductForm({ productId, onCancel, onSaved }: ProductFormProps) 
           />
           Aktif (tampil di toko)
         </label>
+      </section>
+
+      {/* Foto produk */}
+      <section className="bg-white rounded-lg border border-gray-200 p-5 space-y-4">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900">Foto produk</h2>
+          <p className="text-sm text-gray-600 mt-1">Unggah foto JPG, PNG, atau WebP hingga 5 MB.</p>
+        </div>
+
+        {isEdit ? (
+          <>
+            <label className="inline-flex cursor-pointer items-center">
+              <span className="rounded bg-primary-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-700">
+                {uploadingImage ? 'Mengunggah...' : 'Tambah foto'}
+              </span>
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="sr-only"
+                disabled={uploadingImage || saving}
+                onChange={(event) => {
+                  void handleImageUpload(event.target.files?.[0])
+                  event.currentTarget.value = ''
+                }}
+              />
+            </label>
+            {imageError && <p role="alert" className="text-sm text-red-600">{imageError}</p>}
+            {images.length > 0 ? (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+                {images.map((image) => (
+                  <div key={image.id} className="overflow-hidden rounded border border-gray-200">
+                    <img
+                      src={productImageURL(image.storage_key)}
+                      alt={`Foto produk ${image.sort_order + 1}`}
+                      className="aspect-square w-full object-cover"
+                    />
+                    <Button
+                      type="button"
+                      variant="danger"
+                      size="sm"
+                      fullWidth
+                      onClick={() => void handleImageDelete(image.id)}
+                      disabled={uploadingImage || saving}
+                    >
+                      Hapus
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500">Belum ada foto produk.</p>
+            )}
+          </>
+        ) : (
+          <p className="text-sm text-gray-500">Simpan produk terlebih dahulu, lalu unggah fotonya.</p>
+        )}
       </section>
 
       {/* Varian */}

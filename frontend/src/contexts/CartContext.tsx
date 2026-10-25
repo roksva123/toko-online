@@ -1,21 +1,23 @@
-import { createContext, useContext, useState, useCallback } from 'react'
+import { createContext, useContext, useEffect, useState, useCallback } from 'react'
+import { useAuth } from './AuthContext'
+import {
+  addCartItem,
+  clearServerCart,
+  fetchCart,
+  removeCartItem,
+  updateCartItem,
+  type CartItem,
+} from '@/lib/api/cart'
 
-export interface CartItem {
-  product_id: string
-  product_name: string
-  variant_id: string
-  variant_name: string
-  price: number
-  quantity: number
-  image_url: string
-}
+export type { CartItem } from '@/lib/api/cart'
 
 interface CartContextType {
   items: CartItem[]
-  addItem: (item: CartItem) => void
-  removeItem: (product_id: string, variant_id: string) => void
-  updateQuantity: (product_id: string, variant_id: string, quantity: number) => void
-  clearCart: () => void
+  addItem: (item: CartItem) => Promise<void>
+  removeItem: (product_id: string, variant_id: string) => Promise<void>
+  updateQuantity: (product_id: string, variant_id: string, quantity: number) => Promise<void>
+  clearCart: () => Promise<void>
+  isLoading: boolean
   totalItems: number
   subtotal: number
 }
@@ -23,53 +25,63 @@ interface CartContextType {
 const CartContext = createContext<CartContextType | undefined>(undefined)
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isLoading: isAuthLoading } = useAuth()
   const [items, setItems] = useState<CartItem[]>([])
+  const [isLoading, setIsLoading] = useState(false)
 
-  const addItem = useCallback((item: CartItem) => {
-    setItems((prev) => {
-      const existing = prev.find(
-        (i) => i.product_id === item.product_id && i.variant_id === item.variant_id
-      )
+  useEffect(() => {
+    let cancelled = false
 
-      if (existing) {
-        return prev.map((i) =>
-          i.product_id === item.product_id && i.variant_id === item.variant_id
-            ? { ...i, quantity: i.quantity + item.quantity }
-            : i
-        )
-      }
+    if (isAuthLoading) return
+    if (!isAuthenticated) {
+      setItems([])
+      setIsLoading(false)
+      return
+    }
 
-      return [...prev, item]
-    })
+    setIsLoading(true)
+    fetchCart()
+      .then((serverItems) => {
+        if (!cancelled) setItems(serverItems)
+      })
+      .catch(() => {
+        if (!cancelled) setItems([])
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [isAuthenticated, isAuthLoading])
+
+  const addItem = useCallback(async (item: CartItem) => {
+    const serverItems = await addCartItem(item.variant_id, item.quantity)
+    setItems(serverItems)
   }, [])
 
-  const removeItem = useCallback((product_id: string, variant_id: string) => {
-    setItems((prev) =>
-      prev.filter(
-        (i) => !(i.product_id === product_id && i.variant_id === variant_id)
-      )
-    )
+  const removeItem = useCallback(async (_productId: string, variantId: string) => {
+    await removeCartItem(variantId)
+    setItems((prev) => prev.filter((item) => item.variant_id !== variantId))
   }, [])
 
   const updateQuantity = useCallback(
-    (product_id: string, variant_id: string, quantity: number) => {
+    async (_productId: string, variantId: string, quantity: number) => {
       if (quantity <= 0) {
-        removeItem(product_id, variant_id)
+        await removeCartItem(variantId)
+        setItems((prev) => prev.filter((item) => item.variant_id !== variantId))
         return
       }
 
-      setItems((prev) =>
-        prev.map((i) =>
-          i.product_id === product_id && i.variant_id === variant_id
-            ? { ...i, quantity }
-            : i
-        )
-      )
+      const serverItems = await updateCartItem(variantId, quantity)
+      setItems(serverItems)
     },
-    [removeItem]
+    []
   )
 
-  const clearCart = useCallback(() => {
+  const clearCart = useCallback(async () => {
+    await clearServerCart()
     setItems([])
   }, [])
 
@@ -84,6 +96,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         removeItem,
         updateQuantity,
         clearCart,
+        isLoading,
         totalItems,
         subtotal,
       }}

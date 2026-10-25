@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Helmet } from 'react-helmet-async'
 import { useNavigate } from 'react-router-dom'
-import { useQuery, useMutation } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/lib/api/client'
 import { useCart } from '@/contexts/CartContext'
-import { Button, Card, CardBody, Badge, Skeleton, EmptyState, ErrorState } from '@/components/ui'
+import { Button, Card, CardBody, Badge, Skeleton, EmptyState } from '@/components/ui'
 import { formatRupiah } from '@/lib/utils'
 import { AddressFormModal } from '@/features/account/components/AddressFormModal'
 import { addressKeys, fetchAddresses, parseApiError } from '@/lib/api/addresses'
@@ -16,16 +16,22 @@ interface ShippingRate {
   etd: string
 }
 
-type Step = 'address' | 'shipping' | 'summary'
+const DUMMY_SHIPPING_RATES: ShippingRate[] = [
+  { courier: 'Toko Online', service: 'Reguler', rate: 15000, etd: '2-4 hari' },
+  { courier: 'Toko Online', service: 'Express', rate: 30000, etd: '1-2 hari' },
+]
+
+type Step = 'address' | 'summary'
 
 const MAX_ADDRESSES = 10
 
 export default function CheckoutPage() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { items, subtotal, clearCart } = useCart()
   const [currentStep, setCurrentStep] = useState<Step>('address')
   const [selectedAddressId, setSelectedAddressId] = useState<string>('')
-  const [selectedShipping, setSelectedShipping] = useState<{ courier: string; service: string } | null>(null)
+  const [selectedShipping, setSelectedShipping] = useState<ShippingRate | null>(null)
   const [notes, setNotes] = useState('')
   const [isAddressModalOpen, setIsAddressModalOpen] = useState(false)
 
@@ -47,19 +53,24 @@ export default function CheckoutPage() {
     setSelectedAddressId(preferred.id)
   }, [addressesData, selectedAddressId])
 
-  // Fetch shipping rates
-  const { data: shippingRates, isLoading: shippingLoading } = useQuery({
-    queryKey: ['shipping-rates', selectedAddressId],
-    queryFn: async () => {
-      if (!selectedAddressId) return null
-      const response = await apiClient.post<ShippingRate[]>('/shipping/rates', {
-        destination_city_id: '123', // TODO: Get from address
-        weight: 1000, // TODO: Calculate from products
-      })
-      return response.data
-    },
-    enabled: currentStep === 'shipping' && !!selectedAddressId,
-  })
+  // Sementara memakai tarif dummy agar checkout tetap bisa digunakan tanpa API kurir.
+  // Ongkir dihitung dari berat barang dan dibulatkan ke kelipatan Rp5.000.
+  const totalWeight = useMemo(
+    () => items.reduce((sum, item) => sum + item.quantity * 1000, 0),
+    [items]
+  )
+  const shippingRates = useMemo(
+    () =>
+      DUMMY_SHIPPING_RATES.map((rate) => ({
+        ...rate,
+        rate: rate.rate + Math.max(0, Math.ceil((totalWeight - 1000) / 1000)) * 5000,
+      })),
+    [totalWeight]
+  )
+
+  useEffect(() => {
+    setSelectedShipping(shippingRates[0])
+  }, [shippingRates])
 
   // Create order mutation
   const createOrderMutation = useMutation({
@@ -68,7 +79,9 @@ export default function CheckoutPage() {
         address_id: selectedAddressId,
         courier: selectedShipping?.courier,
         service: selectedShipping?.service,
+        shipping_cost: selectedShipping?.rate ?? 0,
         notes,
+        items: items.map((item) => ({ variant_id: item.variant_id, quantity: item.quantity })),
       })
       return response.data
     },
@@ -91,7 +104,7 @@ export default function CheckoutPage() {
     )
   }
 
-  const shippingCost = 0 // TODO: Calculate from selected shipping
+  const shippingCost = selectedShipping?.rate ?? 0
   const total = subtotal + shippingCost
   const atAddressLimit = addresses.length >= MAX_ADDRESSES
 
@@ -106,18 +119,18 @@ export default function CheckoutPage() {
 
         {/* Stepper */}
         <div className="mb-8 flex gap-4">
-          {(['address', 'shipping', 'summary'] as const).map((step, idx) => (
+          {(['address', 'summary'] as const).map((step, idx) => (
             <div key={step} className="flex items-center">
               <button
                 onClick={() => {
-                  if (step === 'address' || (step === 'shipping' && selectedAddressId)) {
+                  if (step === 'address' || (step === 'summary' && selectedAddressId)) {
                     setCurrentStep(step)
                   }
                 }}
                 className={`w-10 h-10 rounded-full font-bold flex items-center justify-center transition-colors ${
                   currentStep === step
                     ? 'bg-primary-600 text-white'
-                    : step === 'address' || (step === 'shipping' && selectedAddressId)
+                    : step === 'address' || (step === 'summary' && selectedAddressId)
                     ? 'bg-primary-100 text-primary-600 cursor-pointer'
                     : 'bg-gray-200 text-gray-600'
                 }`}
@@ -126,8 +139,7 @@ export default function CheckoutPage() {
               </button>
               <div className="text-sm font-medium ml-2">
                 {step === 'address' && 'Alamat'}
-                {step === 'shipping' && 'Pengiriman'}
-                {step === 'summary' && 'Ringkasan'}
+                {step === 'summary' && 'Ringkasan & Pembayaran'}
               </div>
               {idx < 2 && <div className="flex-1 h-1 bg-gray-200 mx-2" />}
             </div>
@@ -171,15 +183,15 @@ export default function CheckoutPage() {
                           <div className="flex justify-between items-start mb-2">
                             <div>
                               <p className="font-semibold">{addr.recipient_name}</p>
-                              <p className="text-sm text-gray-600">{addr.phone}</p>
+                              <p className="text-sm text-gray-600 dark:text-gray-400">{addr.phone}</p>
                             </div>
                             <div className="flex gap-1.5">
                               <Badge variant="default">{addr.label}</Badge>
                               {addr.is_default && <Badge variant="info">Utama</Badge>}
                             </div>
                           </div>
-                          <p className="text-sm text-gray-700">{addr.address}</p>
-                          <p className="text-sm text-gray-600">
+                          <p className="text-sm text-gray-700 dark:text-gray-300">{addr.address}</p>
+                          <p className="text-sm text-gray-600 dark:text-gray-400">
                             {addr.district}, {addr.city}, {addr.province} {addr.postal_code}
                           </p>
                         </button>
@@ -203,71 +215,11 @@ export default function CheckoutPage() {
                       variant="primary"
                       fullWidth
                       className="mt-4"
-                      onClick={() => setCurrentStep('shipping')}
-                    >
-                      Lanjut ke Pengiriman
-                    </Button>
-                  )}
-                </CardBody>
-              </Card>
-            )}
-
-            {/* Step 2: Shipping */}
-            {currentStep === 'shipping' && (
-              <Card>
-                <CardBody>
-                  <h2 className="text-xl font-bold mb-4">Pilih Pengiriman</h2>
-
-                  {shippingLoading ? (
-                    <Skeleton count={3} className="h-20 mb-2" />
-                  ) : !shippingRates || shippingRates.length === 0 ? (
-                    <ErrorState
-                      title="Tidak Ada Pilihan Pengiriman"
-                      message="Kurir tidak tersedia untuk area ini."
-                    />
-                  ) : (
-                    <div className="space-y-3 mb-4">
-                      {shippingRates.map((rate) => (
-                        <button
-                          key={`${rate.courier}-${rate.service}`}
-                          onClick={() =>
-                            setSelectedShipping({
-                              courier: rate.courier,
-                              service: rate.service,
-                            })
-                          }
-                          className={`w-full text-left p-4 border rounded-lg transition-colors ${
-                            selectedShipping?.courier === rate.courier &&
-                            selectedShipping?.service === rate.service
-                              ? 'border-primary-600 bg-primary-50'
-                              : 'border-gray-300 hover:border-primary-600'
-                          }`}
-                        >
-                          <div className="flex justify-between items-center">
-                            <div>
-                              <p className="font-semibold">{rate.courier} - {rate.service}</p>
-                              <p className="text-sm text-gray-600">Estimasi: {rate.etd}</p>
-                            </div>
-                            <p className="font-bold text-primary-600">{formatRupiah(rate.rate)}</p>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  <div className="flex gap-3">
-                    <Button variant="secondary" fullWidth onClick={() => setCurrentStep('address')}>
-                      Kembali
-                    </Button>
-                    <Button
-                      variant="primary"
-                      fullWidth
-                      disabled={!selectedShipping}
                       onClick={() => setCurrentStep('summary')}
                     >
-                      Lanjut ke Ringkasan
+                      Lanjut ke Pembayaran
                     </Button>
-                  </div>
+                  )}
                 </CardBody>
               </Card>
             )}
@@ -283,7 +235,7 @@ export default function CheckoutPage() {
                         <div key={`${item.product_id}-${item.variant_id}`} className="flex justify-between">
                           <div>
                             <p className="font-medium">{item.product_name}</p>
-                            <p className="text-sm text-gray-600">{item.variant_name} x {item.quantity}</p>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">{item.variant_name} x {item.quantity}</p>
                           </div>
                           <p className="font-semibold">{formatRupiah(item.price * item.quantity)}</p>
                         </div>
@@ -310,7 +262,7 @@ export default function CheckoutPage() {
                   <CardBody>
                     <h3 className="font-bold mb-2">Alamat Pengiriman</h3>
                     {selectedAddress && (
-                      <div className="text-sm text-gray-700">
+                      <div className="text-sm text-gray-700 dark:text-gray-300">
                         <p>{selectedAddress.recipient_name} ({selectedAddress.phone})</p>
                         <p>{selectedAddress.address}</p>
                         <p>
@@ -329,7 +281,7 @@ export default function CheckoutPage() {
                       value={notes}
                       onChange={(e) => setNotes(e.target.value)}
                       placeholder="Catatan untuk penjual..."
-                      className="w-full p-3 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      className="w-full p-3 border border-gray-300 rounded text-sm bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-400"
                       rows={3}
                     />
                   </CardBody>
@@ -345,7 +297,7 @@ export default function CheckoutPage() {
                 )}
 
                 <div className="flex gap-3">
-                  <Button variant="secondary" fullWidth onClick={() => setCurrentStep('shipping')}>
+                  <Button variant="secondary" fullWidth onClick={() => setCurrentStep('address')}>
                     Kembali
                   </Button>
                   <Button
@@ -354,7 +306,7 @@ export default function CheckoutPage() {
                     isLoading={createOrderMutation.isPending}
                     onClick={() => createOrderMutation.mutate()}
                   >
-                    Buat Pesanan
+                    Lanjut ke Pembayaran
                   </Button>
                 </div>
               </div>
@@ -390,8 +342,11 @@ export default function CheckoutPage() {
       <AddressFormModal
         isOpen={isAddressModalOpen}
         onClose={() => setIsAddressModalOpen(false)}
+        address={null}
         isFirstAddress={addresses.length === 0}
-        onSaved={(saved) => setSelectedAddressId(saved.id)}
+        onSaved={() => {
+          void queryClient.invalidateQueries({ queryKey: addressKeys.all })
+        }}
       />
     </>
   )
