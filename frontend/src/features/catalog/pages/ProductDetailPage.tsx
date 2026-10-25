@@ -222,50 +222,64 @@ export default function ProductDetailPage() {
 
             <p className="text-3xl font-bold text-primary-600 mt-4">{priceLabel}</p>
 
-            {/* Varian */}
-            <div className="mt-6">
-              <p className="text-sm font-medium text-gray-700 mb-2">
-                Varian: <span className="font-normal text-gray-500">{variant?.name}</span>
-              </p>
-              {product.variants.length > 1 && (
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                  {product.variants.map((v) => {
-                    const selected = v.id === variantId
-                    const habis = v.stock === 0
+            {/* Varian & Atribut */}
+            <div className="mt-6 space-y-6">
+              {/* Atribut (Pilihan untuk menyaring varian) */}
+              {(product.attributes?.length ?? 0) > 0 && (
+                <div className="space-y-4">
+                  {product.attributes.map((attr) => (
+                    <div key={attr.id}>
+                      <p className="text-sm font-medium text-gray-700 mb-2">{attr.name}</p>
+                      <div className="flex flex-wrap gap-2">
+                        {attr.options.map((opt) => {
+                          const selected = selectedOptions[attr.id] === opt.id
+                          return (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              onClick={() =>
+                                setSelectedOptions((prev) => ({ ...prev, [attr.id]: opt.id }))
+                              }
+                              className={`px-3 py-1.5 rounded border text-sm transition-all ${
+                                selected
+                                  ? 'border-primary-600 bg-primary-50 text-primary-900 shadow-sm'
+                                  : 'border-gray-200 text-gray-700 hover:border-gray-300 bg-white'
+                              }`}
+                            >
+                              {opt.value}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
 
-                    // Mencari nama atribut untuk varian ini jika ada (misal: "Merah / XL")
-                    const attrNames = v.attribute_option_ids
-                      .map((oid: string) => {
-                        for (const attr of product.attributes) {
-                          const opt = attr.options.find((o: { id: string; value: string }) => o.id === oid)
-                          if (opt) return opt.value
-                        }
-                        return null
-                      })
-                      .filter(Boolean)
-                      .join(' / ')
-
-                    return (
+              {/* Pilihan Varian (Jika perlu pemilihan langsung) */}
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-gray-700">
+                  Varian Terpilih: <span className="font-normal text-gray-500">{variant?.name}</span>
+                </p>
+                {(product.variants?.length ?? 0) > 1 && (
+                  <div className="flex flex-wrap gap-2">
+                    {product.variants.map((v) => (
                       <button
                         key={v.id}
                         type="button"
                         onClick={() => selectVariant(v.id)}
-                        aria-pressed={selected}
-                        className={`flex flex-col items-center justify-center p-3 rounded-lg border-2 text-sm transition-all duration-200 ${
-                          selected
+                        className={`px-3 py-1.5 rounded border text-sm transition-all ${
+                          v.id === variantId
                             ? 'border-primary-600 bg-primary-50 text-primary-900 shadow-sm'
                             : 'border-gray-200 text-gray-700 hover:border-gray-300 bg-white'
-                        } ${habis ? 'opacity-50 cursor-not-allowed bg-gray-50' : ''}`}
+                        }`}
                       >
-                        <span className="font-semibold">{v.name}</span>
-                        {attrNames && (
-                          <span className="text-xs text-gray-500 mt-1">{attrNames}</span>
-                        )}
+                        {v.name}
                       </button>
-                    )
-                  })}
-                </div>
-              )}
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Stok */}
