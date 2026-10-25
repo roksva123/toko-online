@@ -5,6 +5,8 @@ import path from 'path'
 export default defineConfig({
   plugins: [react()],
   resolve: {
+    // Prefer TypeScript sources when stale tsc output exists beside them in src/.
+    extensions: ['.tsx', '.ts', '.jsx', '.js', '.mjs', '.json'],
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
