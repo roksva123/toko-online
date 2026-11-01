@@ -16,6 +16,7 @@ import (
 
 	errx "github.com/example/toko-online/internal/httpx/error"
 	"github.com/example/toko-online/internal/httpx/response"
+	"github.com/example/toko-online/internal/platform/storage"
 )
 
 var publicSlugRegex = regexp.MustCompile(`^[a-z0-9-]{1,255}$`)
@@ -286,13 +287,12 @@ func (s *Store) GetPublicProduct(ctx context.Context, slug string) (*PublicProdu
 // ---------- Handler ----------
 
 type PublicHandler struct {
-	store *Store
-	// imageBase adalah URL publik server API yang menyajikan folder uploads.
-	imageBase string
+	store   *Store
+	storage storage.Storage
 }
 
-func NewPublicHandler(pool *pgxpool.Pool, imageBase string) *PublicHandler {
-	return &PublicHandler{store: NewStore(pool), imageBase: strings.TrimRight(imageBase, "/")}
+func NewPublicHandler(pool *pgxpool.Pool, objectStorage storage.Storage) *PublicHandler {
+	return &PublicHandler{store: NewStore(pool), storage: objectStorage}
 }
 
 // Mount memasang endpoint publik (tanpa login) di router /api/v1.
@@ -303,10 +303,10 @@ func (h *PublicHandler) Mount(r chi.Router) {
 }
 
 func (h *PublicHandler) imageURL(key string) string {
-	if key == "" || h.imageBase == "" {
+	if h.storage == nil {
 		return ""
 	}
-	return h.imageBase + "/uploads/" + strings.TrimLeft(key, "/")
+	return h.storage.PublicURL(key)
 }
 
 func (h *PublicHandler) ListProducts(w http.ResponseWriter, r *http.Request) {

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"path/filepath"
 
 	"github.com/go-chi/chi/v5"
@@ -18,10 +17,7 @@ import (
 	"github.com/example/toko-online/internal/httpx/response"
 )
 
-const (
-	maxProductImageSize = 5 << 20 // 5 MiB
-	productUploadDir    = "uploads"
-)
+const maxProductImageSize = 5 << 20 // 5 MiB
 
 var allowedProductImageTypes = map[string]string{
 	"image/jpeg": ".jpg",
@@ -32,6 +28,7 @@ var allowedProductImageTypes = map[string]string{
 type ProductImage struct {
 	ID         string `json:"id"`
 	StorageKey string `json:"storage_key"`
+	URL        string `json:"url,omitempty"`
 	SortOrder  int    `json:"sort_order"`
 }
 
@@ -49,6 +46,11 @@ func (h *Handler) ListProductImages(w http.ResponseWriter, r *http.Request) {
 		internalError(w, "list product images", err)
 		return
 	}
+	for i := range images {
+		if h.storage != nil {
+			images[i].URL = h.storage.PublicURL(images[i].StorageKey)
+		}
+	}
 	response.JSON(w, http.StatusOK, images, nil)
 }
 
@@ -62,6 +64,11 @@ func (h *Handler) UploadProductImage(w http.ResponseWriter, r *http.Request) {
 		return
 	} else if !exists {
 		errx.JSON(w, errx.NotFound("Produk tidak ditemukan"))
+		return
+	}
+
+	if h.storage == nil {
+		internalError(w, "initialize image storage", fmt.Errorf("storage is not configured"))
 		return
 	}
 
@@ -91,27 +98,15 @@ func (h *Handler) UploadProductImage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	storageKey := filepath.ToSlash(filepath.Join("products", productID, uuid.NewString()+extension))
-	path := filepath.Join(productUploadDir, filepath.FromSlash(storageKey))
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		internalError(w, "create image directory", err)
-		return
-	}
-	out, err := os.Create(path)
-	if err != nil {
-		internalError(w, "create image file", err)
-		return
-	}
-	_, copyErr := io.Copy(out, io.MultiReader(bytes.NewReader(header[:n]), file))
-	closeErr := out.Close()
-	if copyErr != nil || closeErr != nil {
-		_ = os.Remove(path)
-		internalError(w, "save image file", fmt.Errorf("copy=%v close=%v", copyErr, closeErr))
+	content := io.MultiReader(bytes.NewReader(header[:n]), file)
+	if err := h.storage.Put(r.Context(), storageKey, content, -1, contentType); err != nil {
+		internalError(w, "save image to storage", err)
 		return
 	}
 
 	image, err := h.store.CreateProductImage(r.Context(), productID, storageKey)
 	if err != nil {
-		_ = os.Remove(path)
+		_ = h.storage.Delete(r.Context(), storageKey)
 		internalError(w, "create product image", err)
 		return
 	}
@@ -137,10 +132,11 @@ func (h *Handler) DeleteProductImage(w http.ResponseWriter, r *http.Request) {
 		internalError(w, "delete product image", err)
 		return
 	}
-	if err := os.Remove(filepath.Join(productUploadDir, filepath.FromSlash(storageKey))); err != nil && !os.IsNotExist(err) {
-		// Data sudah terhapus; file yatim tidak boleh membuat request pelanggan gagal.
-		internalError(w, "delete image file", err)
-		return
+	if h.storage != nil {
+		if err := h.storage.Delete(r.Context(), storageKey); err != nil {
+			internalError(w, "delete image from storage", err)
+			return
+		}
 	}
 	response.Empty(w, http.StatusNoContent)
 }

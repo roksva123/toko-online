@@ -15,6 +15,7 @@ import (
 	"github.com/example/toko-online/internal/auth"
 	errx "github.com/example/toko-online/internal/httpx/error"
 	"github.com/example/toko-online/internal/httpx/response"
+	"github.com/example/toko-online/internal/platform/storage"
 )
 
 var (
@@ -24,7 +25,8 @@ var (
 )
 
 type Handler struct {
-	pool *pgxpool.Pool
+	pool    *pgxpool.Pool
+	storage storage.Storage
 }
 
 type cartItem struct {
@@ -42,8 +44,8 @@ type itemInput struct {
 	Quantity  int    `json:"quantity"`
 }
 
-func NewHandler(pool *pgxpool.Pool) *Handler {
-	return &Handler{pool: pool}
+func NewHandler(pool *pgxpool.Pool, objectStorage storage.Storage) *Handler {
+	return &Handler{pool: pool, storage: objectStorage}
 }
 
 func (h *Handler) Mount(r chi.Router, requireAuth func(http.Handler) http.Handler) {
@@ -169,7 +171,7 @@ func (h *Handler) listItems(ctx context.Context, userID string) ([]cartItem, err
 		       v.price,
 		       ci.quantity,
 		       COALESCE((
-		           SELECT '/uploads/' || pi.storage_key
+		           SELECT pi.storage_key
 		           FROM product_images pi
 		           WHERE pi.product_id = p.id
 		           ORDER BY pi.sort_order, pi.created_at
@@ -202,7 +204,15 @@ func (h *Handler) listItems(ctx context.Context, userID string) ([]cartItem, err
 		}
 		items = append(items, item)
 	}
-	return items, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for i := range items {
+		if h.storage != nil && items[i].ImageURL != "" {
+			items[i].ImageURL = h.storage.PublicURL(items[i].ImageURL)
+		}
+	}
+	return items, nil
 }
 
 func (h *Handler) addItem(ctx context.Context, userID string, in itemInput) error {

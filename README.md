@@ -6,7 +6,7 @@ Backend untuk toko online single-vendor dengan pembayaran transfer manual dan tr
 
 - **Go** 1.22+ dengan chi router
 - **PostgreSQL** 16 untuk database
-- **MinIO** untuk storage (S3-compatible)
+- **Supabase Storage** untuk penyimpanan gambar dan bukti pembayaran
 - **JWT** untuk autentikasi
 - **Docker & Docker Compose** untuk development
 
@@ -45,12 +45,12 @@ make docker-up
 ```
 
 Ini akan menjalankan:
-- PostgreSQL 16 di port 5432
-- MinIO di port 9000 (console di 9001)
+- PostgreSQL 16 di port 5433
 - MailHog di port 8025 (web UI untuk testing email)
 
+Storage file menggunakan Supabase Storage. Buat bucket `product-images` di Supabase, lalu isi `SUPABASE_URL`, `SUPABASE_PUBLIC_URL`, dan `SUPABASE_SERVICE_ROLE_KEY` di `.env`. Jangan pernah mengekspos service-role key ke frontend.
+
 Akses:
-- MinIO Console: http://localhost:9001 (user: minioadmin, pass: minioadmin)
 - MailHog: http://localhost:8025
 
 ### 4. Install Dependencies dan Jalankan Migrasi
@@ -198,7 +198,8 @@ Setiap endpoint penting harus memiliki test. Target coverage: 70% untuk layanan 
 │   │   ├── logger/
 │   │   │   └── logger.go        # Structured logging
 │   │   ├── storage/
-│   │   │   └── storage.go       # Storage interface
+│   │   │   ├── storage.go       # Storage interface
+│   │   │   └── supabase.go      # Supabase Storage adapter
 │   │   └── mailer/
 │   │       └── mailer.go        # Email interface
 │   ├── httpx/
@@ -236,7 +237,7 @@ Lihat `.env.example` untuk daftar lengkap environment variable yang tersedia.
 **Development:**
 - `APP_ENV=development`
 - `DATABASE_URL=postgres://...` (gunakan docker-compose)
-- `S3_ENDPOINT=http://localhost:9000` (MinIO lokal)
+- `SUPABASE_URL` dan `SUPABASE_STORAGE_BUCKET` untuk Supabase Storage
 - `SHIPPING_PROVIDER=mock` (shipping palsu untuk tes)
 - `SMTP_HOST=localhost` dengan MailHog
 
@@ -244,7 +245,7 @@ Lihat `.env.example` untuk daftar lengkap environment variable yang tersedia.
 - `APP_ENV=production`
 - `JWT_SECRET` harus strong
 - `DATABASE_URL` pointing ke production database dengan SSL
-- `S3_ENDPOINT` ke Cloudflare R2 atau S3 AWS
+- `SUPABASE_URL` ke project Supabase dan `SUPABASE_SERVICE_ROLE_KEY` hanya di server
 - `SHIPPING_PROVIDER=biteship` dengan API key
 - SMTP dengan email provider yang sesungguhnya (SendGrid, AWS SES, dll)
 

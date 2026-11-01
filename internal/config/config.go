@@ -30,13 +30,11 @@ type Config struct {
 	// CORS
 	CORSOrigins []string
 
-	// S3/Storage
-	S3Endpoint       string
-	S3Bucket         string
-	S3AccessKey      string
-	S3SecretKey      string
-	S3UseSSL         bool
-	S3PublicEndpoint string
+	// Supabase Storage
+	SupabaseURL        string
+	SupabaseBucket     string
+	SupabaseServiceKey string
+	SupabasePublicURL  string
 
 	// Shipping
 	ShippingProvider string
@@ -68,30 +66,27 @@ type Config struct {
 }
 
 func Load() *Config {
-	// Load .env file if it exists (for development)
 	_ = godotenv.Load()
 
 	cfg := &Config{
-		Env:                      getEnv("APP_ENV", "development"),
-		HTTPPort:                 getEnv("HTTP_PORT", "8080"),
-		HTTPAddr:                 getEnv("HTTP_ADDR", "0.0.0.0"),
-		PublicAPIURL:             getEnv("PUBLIC_API_URL", "http://localhost:8080"),
-		DatabaseURL:              getEnv("DATABASE_URL", ""),
-		DatabaseMaxConns:         getEnvInt("DATABASE_MAX_CONNS", 25),
-		DatabaseMinConns:         getEnvInt("DATABASE_MIN_CONNS", 5),
-		JWTSecret:                getEnv("JWT_SECRET", ""),
-		AccessTokenTTL:           getEnvDuration("ACCESS_TOKEN_TTL", 15*time.Minute),
-		RefreshTokenTTL:          getEnvDuration("REFRESH_TOKEN_TTL", 7*24*time.Hour),
-		CORSOrigins:              getEnvList("CORS_ORIGINS", []string{
-				"http://localhost:3000", "http://localhost:5173", "http://localhost:5174",
-				"http://127.0.0.1:3000", "http://127.0.0.1:5173", "http://127.0.0.1:5174",
-			}),
-		S3Endpoint:               getEnv("S3_ENDPOINT", "http://localhost:9000"),
-		S3Bucket:                 getEnv("S3_BUCKET", "toko-online"),
-		S3AccessKey:              getEnv("S3_ACCESS_KEY", "minioadmin"),
-		S3SecretKey:              getEnv("S3_SECRET_KEY", "minioadmin"),
-		S3UseSSL:                 getEnvBool("S3_USE_SSL", false),
-		S3PublicEndpoint:         getEnv("S3_PUBLIC_ENDPOINT", "http://localhost:9000"),
+		Env:              getEnv("APP_ENV", "development"),
+		HTTPPort:         getEnv("HTTP_PORT", "8080"),
+		HTTPAddr:         getEnv("HTTP_ADDR", "0.0.0.0"),
+		PublicAPIURL:     getEnv("PUBLIC_API_URL", "http://localhost:8080"),
+		DatabaseURL:      getEnv("DATABASE_URL", ""),
+		DatabaseMaxConns: getEnvInt("DATABASE_MAX_CONNS", 25),
+		DatabaseMinConns: getEnvInt("DATABASE_MIN_CONNS", 5),
+		JWTSecret:        getEnv("JWT_SECRET", ""),
+		AccessTokenTTL:   getEnvDuration("ACCESS_TOKEN_TTL", 15*time.Minute),
+		RefreshTokenTTL:  getEnvDuration("REFRESH_TOKEN_TTL", 7*24*time.Hour),
+		CORSOrigins: getEnvList("CORS_ORIGINS", []string{
+			"http://localhost:3000", "http://localhost:5173", "http://localhost:5174",
+			"http://127.0.0.1:3000", "http://127.0.0.1:5173", "http://127.0.0.1:5174",
+		}),
+		SupabaseURL:              getEnv("SUPABASE_URL", ""),
+		SupabaseBucket:           getEnv("SUPABASE_STORAGE_BUCKET", "product-images"),
+		SupabaseServiceKey:       getEnv("SUPABASE_SERVICE_ROLE_KEY", ""),
+		SupabasePublicURL:        getEnv("SUPABASE_PUBLIC_URL", ""),
 		ShippingProvider:         getEnv("SHIPPING_PROVIDER", "mock"),
 		BiteshipAPIKey:           getEnv("BITESHIP_API_KEY", ""),
 		OriginLatitude:           getEnvFloat("ORIGIN_LATITUDE", -6.2088),
@@ -110,16 +105,16 @@ func Load() *Config {
 		LogLevel:                 getEnv("LOG_LEVEL", "info"),
 	}
 
-	// Validate required fields
 	cfg.validate()
-
 	return cfg
 }
 
 func (c *Config) validate() {
 	required := map[string]string{
-		"DATABASE_URL": c.DatabaseURL,
-		"JWT_SECRET":   c.JWTSecret,
+		"DATABASE_URL":              c.DatabaseURL,
+		"JWT_SECRET":                c.JWTSecret,
+		"SUPABASE_URL":              c.SupabaseURL,
+		"SUPABASE_SERVICE_ROLE_KEY": c.SupabaseServiceKey,
 	}
 
 	for key, val := range required {

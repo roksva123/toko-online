@@ -392,7 +392,7 @@ export function ProductForm({ productId, onCancel, onSaved }: ProductFormProps) 
                 {images.map((image) => (
                   <div key={image.id} className="overflow-hidden rounded border border-gray-200">
                     <img
-                      src={productImageURL(image.storage_key)}
+                      src={productImageURL(image.storage_key, image.url)}
                       alt={`Foto produk ${image.sort_order + 1}`}
                       className="aspect-square w-full object-cover"
                     />

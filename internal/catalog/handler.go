@@ -16,6 +16,7 @@ import (
 
 	"github.com/example/toko-online/internal/auth"
 	errx "github.com/example/toko-online/internal/httpx/error"
+	"github.com/example/toko-online/internal/platform/storage"
 )
 
 var ErrNotFound = errors.New("not found")
@@ -29,11 +30,12 @@ func NewStore(pool *pgxpool.Pool) *Store {
 }
 
 type Handler struct {
-	store *Store
+	store   *Store
+	storage storage.Storage
 }
 
-func NewHandler(pool *pgxpool.Pool) *Handler {
-	return &Handler{store: NewStore(pool)}
+func NewHandler(pool *pgxpool.Pool, objectStorage storage.Storage) *Handler {
+	return &Handler{store: NewStore(pool), storage: objectStorage}
 }
 
 // MountAdmin memasang endpoint admin di router yang sudah berada di bawah /api/v1.

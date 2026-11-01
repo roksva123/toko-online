@@ -8,8 +8,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -22,6 +20,7 @@ import (
 	"github.com/example/toko-online/internal/auth"
 	errx "github.com/example/toko-online/internal/httpx/error"
 	"github.com/example/toko-online/internal/httpx/response"
+	"github.com/example/toko-online/internal/platform/storage"
 )
 
 var validStatuses = map[string]bool{
@@ -35,17 +34,17 @@ var validStatuses = map[string]bool{
 }
 
 type Handler struct {
-	pool *pgxpool.Pool
+	pool    *pgxpool.Pool
+	storage storage.Storage
 }
 
-func NewHandler(pool *pgxpool.Pool) *Handler {
-	return &Handler{pool: pool}
+func NewHandler(pool *pgxpool.Pool, objectStorage storage.Storage) *Handler {
+	return &Handler{pool: pool, storage: objectStorage}
 }
 
 const (
 	dummyShippingCost   int64 = 15000
 	maxPaymentProofSize       = 5 << 20 // 5 MiB
-	paymentUploadDir          = "uploads"
 )
 
 var allowedPaymentProofTypes = map[string]string{
@@ -411,24 +410,14 @@ func (h *Handler) UploadPaymentProof(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	storageKey := filepath.ToSlash(filepath.Join("payments", orderID, uuid.NewString()+extension))
-	filePath := filepath.Join(paymentUploadDir, filepath.FromSlash(storageKey))
-	if err := os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil {
-		slog.Error("failed to create payment proof directory", slog.Any("error", err))
-		errx.JSON(w, errx.InternalServerError("Gagal menyimpan bukti pembayaran"))
+	if h.storage == nil {
+		errx.JSON(w, errx.InternalServerError("Storage belum dikonfigurasi"))
 		return
 	}
-	out, err := os.Create(filePath)
-	if err != nil {
-		slog.Error("failed to create payment proof file", slog.Any("error", err))
-		errx.JSON(w, errx.InternalServerError("Gagal menyimpan bukti pembayaran"))
-		return
-	}
-	_, copyErr := io.Copy(out, io.MultiReader(bytes.NewReader(header[:n]), file))
-	closeErr := out.Close()
-	if copyErr != nil || closeErr != nil {
-		_ = os.Remove(filePath)
-		slog.Error("failed to write payment proof file", slog.Any("copy_error", copyErr), slog.Any("close_error", closeErr))
+	storageKey := "payments/" + orderID + "/" + uuid.NewString() + extension
+	content := io.MultiReader(bytes.NewReader(header[:n]), file)
+	if err := h.storage.Put(r.Context(), storageKey, content, -1, contentType); err != nil {
+		slog.Error("failed to save payment proof to storage", slog.Any("error", err))
 		errx.JSON(w, errx.InternalServerError("Gagal menyimpan bukti pembayaran"))
 		return
 	}
@@ -436,7 +425,7 @@ func (h *Handler) UploadPaymentProof(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	tx, err := h.pool.Begin(ctx)
 	if err != nil {
-		_ = os.Remove(filePath)
+		_ = h.storage.Delete(ctx, storageKey)
 		errx.JSON(w, errx.InternalServerError("Gagal memproses bukti pembayaran"))
 		return
 	}
@@ -451,7 +440,7 @@ func (h *Handler) UploadPaymentProof(w http.ResponseWriter, r *http.Request) {
 		WHERE p.order_id = $1::uuid AND o.user_id = $2::uuid
 		FOR UPDATE`, orderID, auth.UserID(ctx)).Scan(&paymentStatus, &expiresAt)
 	if err != nil {
-		_ = os.Remove(filePath)
+		_ = h.storage.Delete(ctx, storageKey)
 		if err == pgx.ErrNoRows {
 			errx.JSON(w, errx.NotFound("Pesanan atau pembayaran tidak ditemukan"))
 		} else {
@@ -462,12 +451,12 @@ func (h *Handler) UploadPaymentProof(w http.ResponseWriter, r *http.Request) {
 	}
 	if paymentStatus == "pending" && !expiresAt.After(time.Now()) {
 		_, _ = tx.Exec(ctx, `UPDATE payments SET status = 'expired', updated_at = NOW() WHERE order_id = $1::uuid`, orderID)
-		_ = os.Remove(filePath)
+		_ = h.storage.Delete(ctx, storageKey)
 		errx.JSON(w, errx.Conflict("Waktu pembayaran sudah berakhir"))
 		return
 	}
 	if paymentStatus != "pending" && paymentStatus != "rejected" {
-		_ = os.Remove(filePath)
+		_ = h.storage.Delete(ctx, storageKey)
 		switch paymentStatus {
 		case "waiting_confirmation":
 			errx.JSON(w, errx.Conflict("Bukti pembayaran sedang menunggu konfirmasi admin"))
@@ -489,13 +478,13 @@ func (h *Handler) UploadPaymentProof(w http.ResponseWriter, r *http.Request) {
 		    status = 'waiting_confirmation',
 		    updated_at = NOW()
 		WHERE order_id = $1::uuid`, orderID, storageKey, senderName); err != nil {
-		_ = os.Remove(filePath)
+		_ = h.storage.Delete(ctx, storageKey)
 		slog.Error("failed to update payment proof", slog.Any("error", err))
 		errx.JSON(w, errx.InternalServerError("Gagal memperbarui pembayaran"))
 		return
 	}
 	if err := tx.Commit(ctx); err != nil {
-		_ = os.Remove(filePath)
+		_ = h.storage.Delete(ctx, storageKey)
 		errx.JSON(w, errx.InternalServerError("Gagal menyelesaikan upload bukti pembayaran"))
 		return
 	}
@@ -503,7 +492,7 @@ func (h *Handler) UploadPaymentProof(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, map[string]string{
 		"status":          "waiting_confirmation",
 		"proof_key":       storageKey,
-		"proof_image_url": "/uploads/" + storageKey,
+		"proof_image_url": h.storage.PublicURL(storageKey),
 	}, nil)
 }
 
@@ -547,8 +536,8 @@ func (h *Handler) ListPayments(w http.ResponseWriter, r *http.Request) {
 			errx.JSON(w, errx.InternalServerError("Gagal membaca pembayaran"))
 			return
 		}
-		if proofKey != "" {
-			payment.ProofImageURL = "/uploads/" + strings.TrimPrefix(proofKey, "/")
+		if proofKey != "" && h.storage != nil {
+			payment.ProofImageURL = h.storage.PublicURL(proofKey)
 		}
 		payments = append(payments, payment)
 	}
@@ -796,8 +785,8 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		FROM payments WHERE order_id = $1::uuid`, id).Scan(
 		&payment.ID, &payment.Status, &payment.AmountDue, &payment.ProofImageURL,
 		&payment.SenderName, &payment.RejectionReason, &payment.ExpiresAt, &payment.CreatedAt)
-	if payment.ProofImageURL != "" {
-		payment.ProofImageURL = "/uploads/" + strings.TrimPrefix(payment.ProofImageURL, "/")
+	if payment.ProofImageURL != "" && h.storage != nil {
+		payment.ProofImageURL = h.storage.PublicURL(payment.ProofImageURL)
 	}
 	if err == nil {
 		order.Payment = &payment

@@ -19,7 +19,7 @@ const apiOrigin = (import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1
   ''
 )
 
-const assetURL = (path: string) => `${apiOrigin}${path}`
+const assetURL = (path: string) => /^https?:\/\//i.test(path) ? path : `${apiOrigin}${path}`
 
 export default function AdminPayments() {
   const queryClient = useQueryClient()
