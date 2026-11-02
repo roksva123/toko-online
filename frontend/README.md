@@ -164,6 +164,10 @@ cd ../backend
 go run ./cmd/api
 ```
 
+## Copyright
+
+Copyright © 2026 Toko Online. All rights reserved. See [../COPYRIGHT.md](../COPYRIGHT.md).
+
 ---
 
 **Dibuat:** F1 Setup & Fondasi complete  

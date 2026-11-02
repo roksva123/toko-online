@@ -76,7 +76,7 @@ export function Footer() {
         {/* Divider */}
         <div className="border-t border-gray-700 pt-8">
           <p className="text-center text-sm text-gray-400">
-            &copy; 2024 Toko Online. Semua hak dilindungi.
+            © {new Date().getFullYear()} Toko Online. Semua hak dilindungi.
           </p>
         </div>
       </div>

@@ -303,4 +303,6 @@ Untuk pertanyaan atau issues, hubungi tim development.
 
 ## License
 
-Proprietary - Toko Online
+Copyright © 2026 Toko Online. All rights reserved.
+
+This project is proprietary software. You may not copy, modify, redistribute, resell, or use it in another commercial product without written permission from the copyright owner. See [COPYRIGHT.md](COPYRIGHT.md) for details.
