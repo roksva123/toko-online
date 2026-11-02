@@ -36,7 +36,7 @@ cp .env.example .env
 
 Edit `.env` dan ubah nilai-nilai sesuai kebutuhan Anda. Wajib ubah:
 - `JWT_SECRET` - harus minimal 32 karakter untuk production
-- `DATABASE_URL` - sesuaikan dengan database lokal Anda (atau gunakan docker-compose)
+- `DATABASE_URL` - gunakan database PostgreSQL lokal; konfigurasi Docker Compose tersedia di port `5433`
 
 ### 3. Jalankan Services dengan Docker Compose
 
@@ -48,7 +48,7 @@ Ini akan menjalankan:
 - PostgreSQL 16 di port 5433
 - MailHog di port 8025 (web UI untuk testing email)
 
-Storage file menggunakan Supabase Storage. Buat bucket `product-images` di Supabase, lalu isi `SUPABASE_URL`, `SUPABASE_PUBLIC_URL`, dan `SUPABASE_SERVICE_ROLE_KEY` di `.env`. Jangan pernah mengekspos service-role key ke frontend.
+Database development menggunakan PostgreSQL lokal dari Docker Compose di `localhost:5433`. Storage file masih menggunakan Supabase Storage agar upload gambar dan bukti pembayaran tetap berjalan. Buat bucket `product-images` di Supabase, lalu isi `SUPABASE_URL`, `SUPABASE_PUBLIC_URL`, dan `SUPABASE_SERVICE_ROLE_KEY` di `.env`. Jangan pernah mengekspos service-role key ke frontend.
 
 Akses:
 - MailHog: http://localhost:8025
@@ -197,11 +197,9 @@ Setiap endpoint penting harus memiliki test. Target coverage: 70% untuk layanan 
 │   │   │   └── db.go            # Database connection setup
 │   │   ├── logger/
 │   │   │   └── logger.go        # Structured logging
-│   │   ├── storage/
-│   │   │   ├── storage.go       # Storage interface
-│   │   │   └── supabase.go      # Supabase Storage adapter
-│   │   └── mailer/
-│   │       └── mailer.go        # Email interface
+│   │   └── storage/
+│   │       ├── storage.go       # Storage interface
+│   │       └── supabase.go      # Supabase Storage adapter
 │   ├── httpx/
 │   │   ├── response/
 │   │   │   └── response.go      # HTTP response helpers
@@ -215,7 +213,6 @@ Setiap endpoint penting harus memiliki test. Target coverage: 70% untuk layanan 
 │   ├── cart/                    # Shopping cart (B4)
 │   ├── order/                   # Orders (B5)
 │   ├── payment/                 # Payment processing (B6)
-│   ├── shipping/                # Shipping & tracking (B7)
 │   ├── admin/                   # Admin dashboard (B8)
 │   └── jobs/                    # Background jobs
 ├── migrations/                  # Database migrations
@@ -230,15 +227,24 @@ Setiap endpoint penting harus memiliki test. Target coverage: 70% untuk layanan 
 
 ## Environment Variables
 
-Lihat `.env.example` untuk daftar lengkap environment variable yang tersedia.
+Lihat `.env.example` untuk daftar lengkap environment variable yang tersedia. Untuk development, database utama sudah diarahkan ke PostgreSQL lokal pada `localhost:5433` dari Docker Compose. Supabase hanya digunakan sebagai storage file.
+
+### Fitur Dummy yang Bisa Dikonfigurasi Nanti
+
+Beberapa fitur sengaja masih menggunakan implementasi dummy agar sistem dapat berjalan tanpa provider eksternal:
+
+- **Ongkir:** checkout menggunakan tarif simulasi. Integrasikan provider pengiriman pilihan Anda di kemudian hari.
+- **Reset password:** backend belum mengirim email sungguhan; link reset ditulis ke log server. URL frontend reset saat ini masih contoh lokal dan dapat disesuaikan di `internal/auth/handler.go`.
+
+Konfigurasi provider eksternal dilakukan sendiri melalui `.env` dan perubahan implementasi terkait saat aplikasi siap dipakai production.
 
 ### Production vs Development
 
 **Development:**
 - `APP_ENV=development`
-- `DATABASE_URL=postgres://...` (gunakan docker-compose)
+- `DATABASE_URL=postgres://postgres:postgres@localhost:5433/toko_online?sslmode=disable` untuk PostgreSQL lokal
 - `SUPABASE_URL` dan `SUPABASE_STORAGE_BUCKET` untuk Supabase Storage
-- `SHIPPING_PROVIDER=mock` (shipping palsu untuk tes)
+- Ongkir masih dummy dan dapat dikonfigurasi sendiri nanti
 - `SMTP_HOST=localhost` dengan MailHog
 
 **Production:**
